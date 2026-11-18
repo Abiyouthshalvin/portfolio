@@ -15,18 +15,32 @@ const LINKS = {
 // live = website link, code = GitHub link. Leave "" to hide a button.
 const PROJECTS = [
   {
+    title: "Sanishsoft Company Website",
+    text: "Responsive corporate website for a Chennai web design and development company, built during my role at Adot Publishing Services. Multi-page site covering services, products, blog, FAQ, careers and contact, with enquiry forms, call and WhatsApp buttons, testimonials and scroll animations.",
+    stack: ["HTML5", "CSS3", "Bootstrap", "JavaScript", "jQuery", "WordPress"],
+    live: "https://sanishsoft.com/",
+    code: "",
+  },
+  {
+    title: "SayuTech Business Website",
+    text: "Responsive business website for a Chennai web design and development company. Service and project showcase with client logos, testimonials, local SEO landing pages and an enquiry form for free quotes.",
+    stack: ["HTML5", "CSS3", "Bootstrap", "JavaScript", "PHP"],
+    live: "https://www.sayutech.com/web-design-company-in-chennai.php",
+    code: "",
+  },
+  {
+    title: "Chennai Company Website",
+    text: "Responsive business website for a Chennai company offering web design, advertising and SMS marketing services. Service pages, client showcase, learning center blog and a business directory section, built on WordPress.",
+    stack: ["WordPress", "HTML5", "CSS3", "JavaScript"],
+    live: "https://www.chennaicompany.com/",
+    code: "",
+  },
+  {
     title: "Movie Ticket Booking Application",
     text: "Full-stack booking platform with movie browsing, showtime selection and a 4-step booking flow with seat selection and real-time seat availability. Admin and User accounts secured with JWT and role-based permissions.",
     stack: ["MongoDB", "Express.js", "React.js", "Node.js", "JWT"],
     live: "https://movie-ticket-booking-abiyouth.vercel.app/",
     code: "https://github.com/Abiyouthshalvin/Movie-Ticket-Booking",
-  },
-  {
-    title: "E-commerce Application",
-    text: "Full-stack store with product search, filtering, sorting, cart and order management, plus order history, wishlist and inventory tracking. Admin and Customer roles, Amazon Payment Services, and a MySQL database using joins, foreign keys and stored procedures.",
-    stack: ["React.js", "Node.js", "Express.js", "MySQL"],
-    live: "",
-    code: "",
   },
   {
     title: "Hospital Token Management System",
