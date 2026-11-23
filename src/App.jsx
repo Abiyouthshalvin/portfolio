@@ -410,6 +410,224 @@ const reveal = (i = 0) => ({
   transition: { duration: 0.7, ease: EASE, delay: i * 0.08 },
 });
 
+/* ================= graphics ================= */
+
+// Hero backdrop: grid of dots that swell and glow red around the cursor
+function DotGrid() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const c = ref.current, ctx = c.getContext("2d");
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let W = 0, H = 0, raf = 0, vis = false;
+    const m = { x: -999, y: -999 };
+    const size = () => {
+      const r = c.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+      W = r.width; H = r.height; c.width = W * dpr; c.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    const draw = (t) => {
+      ctx.clearRect(0, 0, W, H);
+      const S = 30;
+      for (let y = S / 2; y < H; y += S) {
+        for (let x = S / 2; x < W; x += S) {
+          const near = Math.max(0, 1 - Math.hypot(x - m.x, y - m.y) / 200);
+          const w = reduce ? 0.3 : (Math.sin(t / 1100 + x * 0.012 + y * 0.008) + 1) / 2;
+          ctx.fillStyle = near > 0.45 ? `rgba(215,25,33,${0.35 + near * 0.65})` : `rgba(255,255,255,${0.09 + w * 0.12 + near * 0.5})`;
+          ctx.beginPath(); ctx.arc(x, y, 1 + w * 0.9 + near * 4.2, 0, 6.283); ctx.fill();
+        }
+      }
+      if (vis && !reduce) raf = requestAnimationFrame(draw);
+    };
+    size(); draw(0);
+    const io = new IntersectionObserver(([e]) => { vis = e.isIntersecting; cancelAnimationFrame(raf); if (vis) raf = requestAnimationFrame(draw); });
+    io.observe(c);
+    const ro = new ResizeObserver(() => { size(); if (reduce) draw(0); });
+    ro.observe(c);
+    const move = (e) => { const r = c.getBoundingClientRect(); m.x = e.clientX - r.left; m.y = e.clientY - r.top; };
+    window.addEventListener("mousemove", move);
+    return () => { cancelAnimationFrame(raf); io.disconnect(); ro.disconnect(); window.removeEventListener("mousemove", move); };
+  }, []);
+  return <canvas ref={ref} className="dotgrid" aria-hidden="true" />;
+}
+
+// Rotating dotted globe with a pulsing marker on Dubai and M-E-R-N nodes orbiting it
+function DotGlobe() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const c = ref.current, ctx = c.getContext("2d");
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const N = 900, pts = [];
+    for (let i = 0; i < N; i++) {
+      const y = 1 - (2 * (i + 0.5)) / N, rr = Math.sqrt(1 - y * y), th = i * 2.399963;
+      pts.push([Math.cos(th) * rr, y, Math.sin(th) * rr]);
+    }
+    const lat = (25.2 * Math.PI) / 180, lon = (55.3 * Math.PI) / 180;
+    const dxb = [Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)];
+    const tilt = 0.38;
+    let S = 0, raf = 0, vis = false, ry = -0.6, mx = 0, smx = 0;
+    const size = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      S = c.clientWidth; c.width = c.height = S * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    const rot = (p, a) => {
+      const x = p[0] * Math.cos(a) + p[2] * Math.sin(a), z = -p[0] * Math.sin(a) + p[2] * Math.cos(a);
+      return [x, p[1] * Math.cos(tilt) - z * Math.sin(tilt), p[1] * Math.sin(tilt) + z * Math.cos(tilt)];
+    };
+    const orbit = (o) => {
+      const x = Math.cos(o) * 1.45, z = Math.sin(o) * 1.45, ox = 0.9, oz = 0.35;
+      const y1 = -z * Math.sin(ox), z1 = z * Math.cos(ox);
+      return [x * Math.cos(oz) - y1 * Math.sin(oz), x * Math.sin(oz) + y1 * Math.cos(oz), z1];
+    };
+    const draw = (t) => {
+      ctx.clearRect(0, 0, S, S);
+      const R = S * 0.3, cx = S / 2, cy = S / 2, k = S / 620;
+      if (!reduce) { ry += 0.0035; smx += (mx - smx) * 0.05; }
+      const a = ry + smx;
+      ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth = 1; ctx.beginPath();
+      for (let i = 0; i <= 120; i++) { const p = orbit((i / 120) * 6.283); i ? ctx.lineTo(cx + p[0] * R, cy + p[1] * R) : ctx.moveTo(cx + p[0] * R, cy + p[1] * R); }
+      ctx.stroke();
+      for (const p of pts) {
+        const [x, y, z] = rot(p, a), d = (z + 1) / 2;
+        ctx.fillStyle = `rgba(255,255,255,${0.07 + d * 0.85})`;
+        ctx.beginPath(); ctx.arc(cx + x * R, cy + y * R, (0.5 + d * 1.5) * k * 1.6, 0, 6.283); ctx.fill();
+      }
+      const [dx, dy, dz] = rot(dxb, a);
+      if (dz > -0.15) {
+        const px = cx + dx * R, py = cy + dy * R, pulse = ((t || 0) / 900) % 1;
+        ctx.strokeStyle = `rgba(215,25,33,${1 - pulse})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px, py, (6 + pulse * 26) * k * 1.6, 0, 6.283); ctx.stroke();
+        ctx.fillStyle = "#d71921"; ctx.beginPath(); ctx.arc(px, py, 6 * k * 1.6, 0, 6.283); ctx.fill();
+        ctx.fillStyle = "#f4f4f2"; ctx.font = `${Math.max(10, 13 * k * 1.6)}px ui-monospace, Menlo, monospace`; ctx.fillText("DXB", px + 14 * k * 1.6, py - 10 * k * 1.6);
+      }
+      ["M", "E", "R", "N"].forEach((ch, i) => {
+        const p = orbit((t || 0) / 2600 + (i * Math.PI) / 2), nx = cx + p[0] * R, ny = cy + p[1] * R, front = p[2] > 0;
+        ctx.globalAlpha = front ? 1 : 0.4;
+        ctx.fillStyle = "#0a0a0a"; ctx.strokeStyle = i === 3 ? "#d71921" : "#f4f4f2"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(nx, ny, 17 * k * 1.6, 0, 6.283); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#f4f4f2"; ctx.font = `600 ${Math.max(11, 15 * k * 1.6)}px ui-monospace, Menlo, monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(ch, nx, ny + 1); ctx.globalAlpha = 1; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      });
+      if (vis && !reduce) raf = requestAnimationFrame(draw);
+    };
+    size(); draw(0);
+    const io = new IntersectionObserver(([e]) => { vis = e.isIntersecting; cancelAnimationFrame(raf); if (vis) raf = requestAnimationFrame(draw); });
+    io.observe(c);
+    const ro = new ResizeObserver(() => { size(); if (reduce) draw(0); });
+    ro.observe(c);
+    const move = (e) => { mx = (e.clientX / window.innerWidth - 0.5) * 1.4; };
+    window.addEventListener("mousemove", move);
+    return () => { cancelAnimationFrame(raf); io.disconnect(); ro.disconnect(); window.removeEventListener("mousemove", move); };
+  }, []);
+  return <canvas ref={ref} className="globe" aria-hidden="true" />;
+}
+
+const CODE = [
+  "const dev = {",
+  '  name: "Abiyouth Shalvin",',
+  '  role: "MERN Stack Developer",',
+  '  stack: ["MongoDB", "Express", "React", "Node"],',
+  '  location: "Dubai, UAE",',
+  "  openToWork: true,",
+  "};",
+  "",
+  'dev.build("something great");',
+];
+function colorize(line) {
+  return line.split(/("[^"]*"?|\bconst\b|\btrue\b)/).map((t, i) => {
+    if (t.startsWith('"')) return <span key={i} className="t-s">{t}</span>;
+    if (t === "const" || t === "true") return <span key={i} className="t-k">{t}</span>;
+    return t;
+  });
+}
+// Code window that types itself out when scrolled into view
+function Terminal() {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, amount: 0.4 });
+  const full = CODE.join("\n");
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!inView) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setN(full.length); return; }
+    const id = setInterval(() => setN((v) => (v >= full.length ? v : v + 1)), 28);
+    return () => clearInterval(id);
+  }, [inView, full.length]);
+  const lines = full.slice(0, n).split("\n");
+  return (
+    <div className="terminal" ref={ref} aria-label="Code snippet describing Abiyouth Shalvin" role="img">
+      <div className="t-bar"><i className="r" /><i /><i /><span>dev.js</span></div>
+      <pre>
+        {lines.map((l, i) => (
+          <div className="t-line" key={i}><em>{i + 1}</em><span>{colorize(l)}{i === lines.length - 1 && <b className="caret">▍</b>}</span></div>
+        ))}
+      </pre>
+    </div>
+  );
+}
+
+function Badge() {
+  return (
+    <svg viewBox="0 0 200 200" className="badge" aria-hidden="true">
+      <defs><path id="badge-circle" d="M100,100 m-76,0 a76,76 0 1,1 152,0 a76,76 0 1,1 -152,0" /></defs>
+      <g className="badge-spin">
+        <text><textPath href="#badge-circle" textLength="470" lengthAdjust="spacing">OPEN TO WORK • MERN DEVELOPER • DUBAI, UAE • </textPath></text>
+      </g>
+      <circle cx="100" cy="100" r="14" fill="#d71921" className="badge-dot" />
+    </svg>
+  );
+}
+
+// Giant words that slide sideways as you scroll
+function BigWords() {
+  const ref = useRef(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
+  const x1 = useTransform(scrollYProgress, [0, 1], ["12%", "-48%"]);
+  const x2 = useTransform(scrollYProgress, [0, 1], ["-48%", "12%"]);
+  return (
+    <div className="bigwords dark" ref={ref} aria-hidden="true">
+      <motion.div className="bw outline" style={{ x: x1 }}>MONGODB • EXPRESS • REACT • NODE • MONGODB • EXPRESS •</motion.div>
+      <motion.div className="bw" style={{ x: x2 }}>FULL STACK • DEVELOPER • DUBAI • FULL STACK • DEVELOPER •</motion.div>
+    </div>
+  );
+}
+
+// Little website wireframes drawn on the monitor screen, one layout per project
+const WIRES = [
+  [[0, 0, 12, 1], [0, 1, 12, 3, 1], [0, 4, 4, 3], [4, 4, 4, 3], [8, 4, 4, 3]],
+  [[0, 0, 12, 1], [0, 1, 3, 4, 1], [3, 1, 3, 4], [6, 1, 3, 4], [9, 1, 3, 4], [0, 5, 12, 2]],
+  [[0, 0, 12, 1], [0, 1, 3, 6], [3, 1, 3, 2, 1], [6, 1, 3, 2], [9, 1, 3, 2], [3, 3, 3, 2], [6, 3, 3, 2], [9, 3, 3, 2], [3, 5, 9, 2]],
+  [[0, 0, 3, 7], [3, 0, 9, 1], [3, 1, 4, 3, 1], [7, 1, 5, 3], [3, 4, 9, 3]],
+];
+function Wire({ i }) {
+  const w = WIRES[i % WIRES.length];
+  return (
+    <div className="wire" aria-hidden="true">
+      {w.map(([c, r, cw, rh, hot], k) => (
+        <motion.i key={`${i}-${k}`} className={hot ? "hot" : ""} style={{ gridColumn: `${c + 1} / span ${cw}`, gridRow: `${r + 1} / span ${rh}` }}
+          initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: k * 0.06, duration: 0.4, ease: EASE }} />
+      ))}
+    </div>
+  );
+}
+
+// Cards lean toward the cursor (uses the CSS `rotate` property so it never fights framer-motion's transform)
+function useTilt() {
+  useEffect(() => {
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let el = null;
+    const reset = () => { if (el) { el.style.rotate = ""; el = null; } };
+    const move = (e) => {
+      const t = e.target.closest?.(".card");
+      if (t !== el) { reset(); el = t; }
+      if (!el) return;
+      const r = el.getBoundingClientRect(), px = (e.clientX - r.left) / r.width - 0.5, py = (e.clientY - r.top) / r.height - 0.5;
+      const rx = -py * 9, ry = px * 9, ang = Math.hypot(rx, ry);
+      el.style.rotate = ang ? `${rx / ang} ${ry / ang} 0 ${ang}deg` : "";
+    };
+    window.addEventListener("pointermove", move);
+    return () => { window.removeEventListener("pointermove", move); reset(); };
+  }, []);
+}
+
 /* ================= sections ================= */
 
 const NAV = [
@@ -477,6 +695,8 @@ function Hero() {
   const fade = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
   return (
     <section id="home" className="hero dark" ref={ref}>
+      <DotGrid />
+      <motion.div className="hero-globe" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 1.2, duration: 1.4, ease: EASE }}><DotGlobe /></motion.div>
       <motion.div className="hero-inner" style={{ y, opacity: fade }}>
         <motion.p className="mono-label" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.1 }}>
           <i className="led" /> Open to work · Dubai, UAE
@@ -519,6 +739,11 @@ function About() {
           <motion.div className="card c-clock invert" {...reveal(3)}>
             <span className="mono-label">DXB · Dubai, UAE</span>
             <b><DubaiClock /></b>
+          </motion.div>
+          <motion.div className="card c-term invert" {...reveal(0)}><Terminal /></motion.div>
+          <motion.div className="card c-badge invert" {...reveal(1)}>
+            <Badge />
+            <p className="mono-label">1 year · React JS · MERN</p>
           </motion.div>
           <motion.div className="card c-open invert" {...reveal(0)}>
             <p><i className="led" /> Open to React JS and MERN developer roles</p>
@@ -644,9 +869,12 @@ function Projects() {
                 </div>
                 <AnimatePresence mode="wait">
                   <motion.div key={idx} className="mon-body" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -24 }} transition={{ duration: 0.35, ease: EASE }}>
-                    <b>{String(idx + 1).padStart(2, "0")}</b>
-                    <h4>{p.title}</h4>
-                    <div className="chips">{p.stack.slice(0, 5).map((t) => <span key={t}>{t}</span>)}</div>
+                    <Wire i={idx} />
+                    <div className="mon-text">
+                      <b>{String(idx + 1).padStart(2, "0")}</b>
+                      <h4>{p.title}</h4>
+                      <div className="chips">{p.stack.slice(0, 5).map((t) => <span key={t}>{t}</span>)}</div>
+                    </div>
                   </motion.div>
                 </AnimatePresence>
                 <motion.div className="screen-bar" animate={{ scaleX: (idx + 1) / n }} transition={{ duration: 0.4, ease: EASE }} />
@@ -668,6 +896,7 @@ function Projects() {
                 <button className="mon-close" onClick={() => setFull(false)}>Close ✕</button>
               </div>
               <motion.div className="mon-full-body" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25, duration: 0.5, ease: EASE }}>
+                <Wire i={idx} />
                 <b>{String(idx + 1).padStart(2, "0")}</b>
                 <h3>{p.title}</h3>
                 <p>{p.text}</p>
@@ -809,6 +1038,7 @@ function Contact() {
 
 export default function App() {
   const [loading, setLoading] = useState(true);
+  useTilt();
   return (
     <MotionConfig reducedMotion="user">
       <AnimatePresence>{loading && <Preloader onDone={() => setLoading(false)} />}</AnimatePresence>
@@ -822,13 +1052,17 @@ export default function App() {
         <About />
         <Education />
         <Experience />
+        <BigWords />
         <Projects />
         <Skills />
         <Contact />
       </main>
-      <footer className="footer">
-        <span><i className="led" /> © 2026 Abiyouth Shalvin</span>
-        <a href="#home">Back to top ↑</a>
+      <footer className="foot">
+        <div className="wordmark" aria-hidden="true">ABIYOUTH</div>
+        <div className="footer">
+          <span><i className="led" /> © 2026 Abiyouth Shalvin</span>
+          <a href="#home">Back to top ↑</a>
+        </div>
       </footer>
     </MotionConfig>
   );
