@@ -451,76 +451,6 @@ function DotGrid() {
 }
 
 // Rotating dotted globe with a pulsing marker on Dubai and M-E-R-N nodes orbiting it
-function DotGlobe() {
-  const ref = useRef(null);
-  useEffect(() => {
-    const c = ref.current, ctx = c.getContext("2d");
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const N = 900, pts = [];
-    for (let i = 0; i < N; i++) {
-      const y = 1 - (2 * (i + 0.5)) / N, rr = Math.sqrt(1 - y * y), th = i * 2.399963;
-      pts.push([Math.cos(th) * rr, y, Math.sin(th) * rr]);
-    }
-    const lat = (25.2 * Math.PI) / 180, lon = (55.3 * Math.PI) / 180;
-    const dxb = [Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)];
-    const tilt = 0.38;
-    let S = 0, raf = 0, vis = false, ry = -0.6, mx = 0, smx = 0;
-    const size = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      S = c.clientWidth; c.width = c.height = S * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    const rot = (p, a) => {
-      const x = p[0] * Math.cos(a) + p[2] * Math.sin(a), z = -p[0] * Math.sin(a) + p[2] * Math.cos(a);
-      return [x, p[1] * Math.cos(tilt) - z * Math.sin(tilt), p[1] * Math.sin(tilt) + z * Math.cos(tilt)];
-    };
-    const orbit = (o) => {
-      const x = Math.cos(o) * 1.45, z = Math.sin(o) * 1.45, ox = 0.9, oz = 0.35;
-      const y1 = -z * Math.sin(ox), z1 = z * Math.cos(ox);
-      return [x * Math.cos(oz) - y1 * Math.sin(oz), x * Math.sin(oz) + y1 * Math.cos(oz), z1];
-    };
-    const draw = (t) => {
-      ctx.clearRect(0, 0, S, S);
-      const R = S * 0.3, cx = S / 2, cy = S / 2, k = S / 620;
-      if (!reduce) { ry += 0.0035; smx += (mx - smx) * 0.05; }
-      const a = ry + smx;
-      ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth = 1; ctx.beginPath();
-      for (let i = 0; i <= 120; i++) { const p = orbit((i / 120) * 6.283); i ? ctx.lineTo(cx + p[0] * R, cy + p[1] * R) : ctx.moveTo(cx + p[0] * R, cy + p[1] * R); }
-      ctx.stroke();
-      for (const p of pts) {
-        const [x, y, z] = rot(p, a), d = (z + 1) / 2;
-        ctx.fillStyle = `rgba(255,255,255,${0.07 + d * 0.85})`;
-        ctx.beginPath(); ctx.arc(cx + x * R, cy + y * R, (0.5 + d * 1.5) * k * 1.6, 0, 6.283); ctx.fill();
-      }
-      const [dx, dy, dz] = rot(dxb, a);
-      if (dz > -0.15) {
-        const px = cx + dx * R, py = cy + dy * R, pulse = ((t || 0) / 900) % 1;
-        ctx.strokeStyle = `rgba(215,25,33,${1 - pulse})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px, py, (6 + pulse * 26) * k * 1.6, 0, 6.283); ctx.stroke();
-        ctx.fillStyle = "#d71921"; ctx.beginPath(); ctx.arc(px, py, 6 * k * 1.6, 0, 6.283); ctx.fill();
-        ctx.fillStyle = "#f4f4f2"; ctx.font = `${Math.max(10, 13 * k * 1.6)}px ui-monospace, Menlo, monospace`; ctx.fillText("DXB", px + 14 * k * 1.6, py - 10 * k * 1.6);
-      }
-      ["M", "E", "R", "N"].forEach((ch, i) => {
-        const p = orbit((t || 0) / 2600 + (i * Math.PI) / 2), nx = cx + p[0] * R, ny = cy + p[1] * R, front = p[2] > 0;
-        ctx.globalAlpha = front ? 1 : 0.4;
-        ctx.fillStyle = "#0a0a0a"; ctx.strokeStyle = i === 3 ? "#d71921" : "#f4f4f2"; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(nx, ny, 17 * k * 1.6, 0, 6.283); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = "#f4f4f2"; ctx.font = `600 ${Math.max(11, 15 * k * 1.6)}px ui-monospace, Menlo, monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(ch, nx, ny + 1); ctx.globalAlpha = 1; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-      });
-      if (vis && !reduce) raf = requestAnimationFrame(draw);
-    };
-    size(); draw(0);
-    const io = new IntersectionObserver(([e]) => { vis = e.isIntersecting; cancelAnimationFrame(raf); if (vis) raf = requestAnimationFrame(draw); });
-    io.observe(c);
-    const ro = new ResizeObserver(() => { size(); if (reduce) draw(0); });
-    ro.observe(c);
-    const move = (e) => { mx = (e.clientX / window.innerWidth - 0.5) * 1.4; };
-    window.addEventListener("mousemove", move);
-    return () => { cancelAnimationFrame(raf); io.disconnect(); ro.disconnect(); window.removeEventListener("mousemove", move); };
-  }, []);
-  return <canvas ref={ref} className="globe" aria-hidden="true" />;
-}
-
 const CODE = [
   "const dev = {",
   '  name: "Abiyouth Shalvin",',
@@ -628,6 +558,60 @@ function useTilt() {
   }, []);
 }
 
+
+/* ================= hero: MERN request flow (packets that transform at every hop) ================= */
+const FLOW_NODES = [["R", "React", "UI"], ["E", "Express", "API"], ["N", "Node.js", "SERVER"], ["M", "MongoDB", "DATABASE"]];
+const FLOW_STEPS = [
+  { p: 0, t: "onClick()", s: "pill" }, { p: 1, t: "GET /api/movies", s: "square" },
+  { p: 2, t: "controller()", s: "diamond" }, { p: 3, t: "find({})", s: "pill" },
+  { p: 3, t: "{ _id, title }", s: "square", back: true }, { p: 2, t: "JSON.stringify", s: "diamond", back: true },
+  { p: 1, t: "200 OK", s: "pill", back: true }, { p: 0, t: "<MovieCard />", s: "square", back: true },
+];
+function StackFlow() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = setInterval(() => setI((v) => (v + 1) % FLOW_STEPS.length), 1300);
+    return () => clearInterval(id);
+  }, []);
+  const st = FLOW_STEPS[i];
+  return (
+    <motion.div className="flow" aria-label="MERN request flow: React, Express, Node.js, MongoDB" role="img" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.3, duration: 0.8, ease: EASE }}>
+      <div className="flow-track"><i className="flow-fill" style={{ width: `${(st.p / 3) * 100}%` }} /></div>
+      <div className="flow-pkt" style={{ left: `calc(12.5% + ${st.p * 25}%)` }}>
+        <span key={i} className={`chip ${st.s} ${st.back ? "resp" : ""}`}>{st.t}</span>
+        <b className={`flow-dot ${st.back ? "resp" : ""}`} />
+      </div>
+      <div className="flow-nodes">
+        {FLOW_NODES.map(([l, name, role], n) => (
+          <div key={name} className={`flow-node ${st.p === n ? "on" : ""}`}>
+            <span className="ic">{l}</span>
+            <strong>{name}</strong>
+            <small>{role}</small>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+// text that decodes itself whenever it changes
+function Scramble({ text }) {
+  const [out, setOut] = useState(text);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setOut(text); return; }
+    const chars = "01<>{}/#_[]";
+    let f = 0;
+    const id = setInterval(() => {
+      f++;
+      setOut(text.split("").map((c, k) => (c === " " || k < f / 2 ? c : chars[(Math.random() * chars.length) | 0])).join(""));
+      if (f > text.length * 2) { clearInterval(id); setOut(text); }
+    }, 32);
+    return () => clearInterval(id);
+  }, [text]);
+  return <span aria-label={text}>{out}</span>;
+}
+
 /* ================= sections ================= */
 
 const NAV = [
@@ -638,6 +622,10 @@ const NAV = [
 function Nav() {
   const [active, setActive] = useState("home");
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [hover, setHover] = useState(false);
+  const [vw, setVw] = useState(typeof window === "undefined" ? 1280 : window.innerWidth);
+  const ref = useRef(null);
   useEffect(() => {
     const onScroll = () => {
       let cur = NAV[0][0];
@@ -646,10 +634,15 @@ function Nav() {
         if (s && s.getBoundingClientRect().top <= 200) cur = id;
       }
       setActive(cur);
+      setScrolled(window.scrollY > 80);
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      ref.current?.style.setProperty("--p", max > 0 ? Math.min(1, window.scrollY / max).toFixed(3) : "0");
     };
+    const onResize = () => setVw(window.innerWidth);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    window.addEventListener("resize", onResize);
+    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onResize); };
   }, []);
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -658,26 +651,55 @@ function Nav() {
     return () => window.removeEventListener("keydown", esc);
   }, [open]);
 
+  const wide = vw >= 900;
+  const expanded = wide && (!scrolled || hover);
+  const full = Math.min(880, vw - 32);
+  const width = wide ? (expanded ? full : 300) : full;
+  const idx = Math.max(0, NAV.findIndex(([id]) => id === active));
+  const label = NAV[idx][1];
+
   return (
     <>
-      <motion.header className="nav" initial={{ y: -90, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.8, ease: EASE, delay: 0.3 }}>
+      <motion.header
+        ref={ref}
+        className={`nav ${expanded ? "is-open" : "is-compact"}`}
+        initial={{ y: -90, opacity: 0, width }}
+        animate={{ y: 0, opacity: 1, width }}
+        transition={{ duration: 0.6, ease: EASE, y: { duration: 0.8, delay: 0.3 }, opacity: { duration: 0.8, delay: 0.3 } }}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        onFocus={() => setHover(true)}
+        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setHover(false); }}
+      >
         <a className="logo" href="#home"><i />AS</a>
-        <nav className="nav-links" aria-label="Primary">
-          {NAV.map(([id, label]) => (
-            <a key={id} href={`#${id}`} className={active === id ? "on" : ""}>
-              {active === id && <motion.span layoutId="nav-pill" className="nav-pill" transition={{ duration: 0.35, ease: EASE }} />}
-              <span className="nav-txt">{label}</span>
-            </a>
-          ))}
-        </nav>
-        <button className="menu-btn" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Close" : "Menu"}</button>
+        <div className="nav-mid">
+          <AnimatePresence mode="wait" initial={false}>
+            {expanded ? (
+              <motion.nav key="links" className="nav-links" aria-label="Primary" initial={{ opacity: 0, filter: "blur(8px)", scale: 0.92 }} animate={{ opacity: 1, filter: "blur(0px)", scale: 1 }} exit={{ opacity: 0, filter: "blur(8px)", scale: 0.92 }} transition={{ duration: 0.3, ease: EASE }}>
+                {NAV.map(([id, l]) => (
+                  <a key={id} href={`#${id}`} className={active === id ? "on" : ""}>
+                    {active === id && <motion.span layoutId="nav-pill" className="nav-pill" transition={{ duration: 0.35, ease: EASE }} />}
+                    <span className="nav-txt">{l}</span>
+                  </a>
+                ))}
+              </motion.nav>
+            ) : (
+              <motion.button key="now" type="button" className="nav-now" aria-label={`Current section: ${label}. Open menu`} onClick={() => (wide ? setHover(true) : setOpen(true))} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.25, ease: EASE }}>
+                <em>{String(idx + 1).padStart(2, "0")}/{String(NAV.length).padStart(2, "0")}</em>
+                <Scramble text={label.toUpperCase()} />
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </div>
+        <svg className="nav-ring" viewBox="0 0 36 36" aria-hidden="true"><circle className="ring-bg" cx="18" cy="18" r="14" /><circle className="ring-fg" cx="18" cy="18" r="14" /></svg>
+        {!wide && <button className="menu-btn" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Close" : "Menu"}</button>}
       </motion.header>
       <AnimatePresence>
         {open && (
           <motion.div className="overlay" initial={{ clipPath: "circle(0% at 90% 4%)" }} animate={{ clipPath: "circle(150% at 90% 4%)" }} exit={{ clipPath: "circle(0% at 90% 4%)" }} transition={{ duration: 0.6, ease: EASE }}>
-            {NAV.map(([id, label], i) => (
+            {NAV.map(([id, l], i) => (
               <motion.a key={id} href={`#${id}`} onClick={() => setOpen(false)} initial={{ x: -40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.15 + i * 0.06, duration: 0.5, ease: EASE }}>
-                <em>{String(i + 1).padStart(2, "0")}</em>{label}
+                <em>{String(i + 1).padStart(2, "0")}</em>{l}
               </motion.a>
             ))}
           </motion.div>
@@ -696,12 +718,12 @@ function Hero() {
   return (
     <section id="home" className="hero dark" ref={ref}>
       <DotGrid />
-      <motion.div className="hero-globe" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 1.2, duration: 1.4, ease: EASE }}><DotGlobe /></motion.div>
       <motion.div className="hero-inner" style={{ y, opacity: fade }}>
         <motion.p className="mono-label" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.1 }}>
           <i className="led" /> Open to work · Dubai, UAE
         </motion.p>
-        <DotText lines={["ABIYOUTH", "SHALVIN"]} morph={[["ABIYOUTH", "SHALVIN"], ["MERN", "DEVELOPER"], ["FULL", "STACK"]]} label="Abiyouth Shalvin, MERN Stack Developer" />
+        <DotText lines={["ABIYOUTH", "SHALVIN"]} morph={[["ABIYOUTH", "SHALVIN"], ["MERN", "DEVELOPER"], ["FULL", "STACK"]]} maxFs={165} label="Abiyouth Shalvin, MERN Stack Developer" />
+        <StackFlow />
         <motion.div className="hero-bottom" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.5, duration: 0.8, ease: EASE }}>
           <div>
             <p className="typing">{`> ${role}`}<b className="caret">_</b></p>
@@ -816,12 +838,39 @@ function Experience() {
 // Pinned phone: scroll and the screen swaps to the next project
 function Projects() {
   const ref = useRef(null);
+  const rig = useRef(null);
   const [idx, setIdx] = useState(0);
   const n = PROJECTS.length;
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
-  useMotionValueEvent(scrollYProgress, "change", (v) => setIdx(Math.min(n - 1, Math.max(0, Math.floor(v * n)))));
   const p = PROJECTS[idx];
   const [full, setFull] = useState(false);
+
+  // the monitor stays frozen; scrolling pans the projects across its screen, one after another
+  useEffect(() => {
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const el = ref.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const span = el.offsetHeight - window.innerHeight;
+      const pr = Math.min(1, Math.max(0, span > 0 ? -r.top / span : 0));
+      const t = pr * (n - 1);
+      const k = Math.min(n - 2, Math.floor(t));
+      const l = t - k;
+      const s = Math.min(1, Math.max(0, (l - 0.25) / 0.5));
+      const e = s * s * (3 - 2 * s);          // dwell on each project, then glide to the next
+      const pos = n > 1 ? k + e : 0;
+      rig.current?.style.setProperty("--pos", pos.toFixed(3));
+      const near = Math.round(pos);
+      setIdx((cur) => (cur === near ? cur : near));
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); if (raf) cancelAnimationFrame(raf); };
+  }, [n]);
+
   useEffect(() => {
     document.body.style.overflow = full ? "hidden" : "";
     const esc = (e) => e.key === "Escape" && setFull(false);
@@ -834,16 +883,50 @@ function Projects() {
     const top = el.getBoundingClientRect().top + window.scrollY;
     window.scrollTo({ top: top + (el.offsetHeight - window.innerHeight) * ((i + 0.5) / n), behavior: "smooth" });
   };
+  const host = p.live ? new URL(p.live).host : "private project";
 
   return (
-    <section id="projects" className="proj dark" ref={ref} style={{ height: `${n * 85 + 15}vh` }}>
+    <section id="projects" className="proj dark" ref={ref} style={{ height: `${n * 90 + 20}vh` }}>
       <div className="proj-sticky">
-        <div className="proj-info">
+        <div className="proj-left">
           <p className="eyebrow">( 04 ) Selected work</p>
           <div className="proj-count"><b>{String(idx + 1).padStart(2, "0")}</b><span>/ {String(n).padStart(2, "0")}</span></div>
           <AnimatePresence mode="wait">
-            <motion.div key={idx} initial={{ opacity: 0, y: 30, filter: "blur(8px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -20, filter: "blur(8px)" }} transition={{ duration: 0.35, ease: EASE }}>
-              <h3>{p.title}</h3>
+            <motion.h3 key={idx} initial={{ opacity: 0, x: 60, filter: "blur(8px)" }} animate={{ opacity: 1, x: 0, filter: "blur(0px)" }} exit={{ opacity: 0, x: -60, filter: "blur(8px)" }} transition={{ duration: 0.35, ease: EASE }}>{p.title}</motion.h3>
+          </AnimatePresence>
+        </div>
+
+        <div className="proj-stage">
+          <div className="mon3d" ref={rig} style={{ "--n": n }}>
+            <div className="monitor" role="button" tabIndex={0} aria-label={`Expand ${p.title}`} onClick={() => setFull(true)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setFull(true)}>
+              <div className="mon-screen">
+                <div className="mon-bar"><i className="r" /><i /><i /><span>{host}</span></div>
+                <div className="mon-view">
+                  <div className="mon-strip" style={{ width: `${n * 100}%` }}>
+                    {PROJECTS.map((q, k) => (
+                      <div className="mon-body slide" key={q.title} aria-hidden={k !== idx}>
+                        <Wire i={k} />
+                        <div className="mon-text">
+                          <b>{String(k + 1).padStart(2, "0")}</b>
+                          <h4>{q.title}</h4>
+                          <div className="chips">{q.stack.slice(0, 5).map((t) => <span key={t}>{t}</span>)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="screen-bar" />
+              </div>
+            </div>
+            <i className="m-neck" aria-hidden="true" />
+            <i className="m-foot" aria-hidden="true" />
+          </div>
+          <p className="expand-hint">Scroll to browse · click the screen to expand</p>
+        </div>
+
+        <div className="proj-right">
+          <AnimatePresence mode="wait">
+            <motion.div key={idx} initial={{ opacity: 0, x: 60, filter: "blur(8px)" }} animate={{ opacity: 1, x: 0, filter: "blur(0px)" }} exit={{ opacity: 0, x: -60, filter: "blur(8px)" }} transition={{ duration: 0.35, ease: EASE }}>
               <p className="proj-text">{p.text}</p>
               <p className="stack">{p.stack.join("  /  ")}</p>
               <div className="row">
@@ -852,50 +935,24 @@ function Projects() {
               </div>
             </motion.div>
           </AnimatePresence>
-          <div className="proj-dots" role="tablist" aria-label="Projects">
-            {PROJECTS.map((q, i) => (
-              <button key={q.title} role="tab" aria-selected={i === idx} aria-label={q.title} className={i === idx ? "on" : ""} onClick={() => jump(i)} />
-            ))}
-          </div>
         </div>
 
-        <div className="phone-wrap">
-          <div className="monitor-wrap">
-            <motion.div className="monitor" layoutId="monitor" role="button" tabIndex={0} aria-label={`Expand ${p.title}`} onClick={() => setFull(true)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setFull(true)} whileHover={{ scale: 1.03 }}>
-              <div className="mon-screen">
-                <div className="mon-bar">
-                  <i className="r" /><i /><i />
-                  <span>{p.live ? new URL(p.live).host : "private project"}</span>
-                </div>
-                <AnimatePresence mode="wait">
-                  <motion.div key={idx} className="mon-body" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -24 }} transition={{ duration: 0.35, ease: EASE }}>
-                    <Wire i={idx} />
-                    <div className="mon-text">
-                      <b>{String(idx + 1).padStart(2, "0")}</b>
-                      <h4>{p.title}</h4>
-                      <div className="chips">{p.stack.slice(0, 5).map((t) => <span key={t}>{t}</span>)}</div>
-                    </div>
-                  </motion.div>
-                </AnimatePresence>
-                <motion.div className="screen-bar" animate={{ scaleX: (idx + 1) / n }} transition={{ duration: 0.4, ease: EASE }} />
-              </div>
-            </motion.div>
-            <p className="expand-hint">Click the screen to expand</p>
-            <div className="mon-neck" />
-            <div className="mon-base" />
-          </div>
+        <div className="proj-dots" role="tablist" aria-label="Projects">
+          {PROJECTS.map((q, i) => (
+            <button key={q.title} role="tab" aria-selected={i === idx} aria-label={q.title} className={i === idx ? "on" : ""} onClick={() => jump(i)} />
+          ))}
         </div>
       </div>
       <AnimatePresence>
         {full && (
           <motion.div className="mon-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setFull(false)}>
-            <motion.div className="mon-full" layoutId="monitor" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={p.title}>
+            <motion.div className="mon-full" initial={{ opacity: 0, scale: 0.88, rotateX: 18 }} animate={{ opacity: 1, scale: 1, rotateX: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.45, ease: EASE }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={p.title}>
               <div className="mon-bar">
                 <i className="r" /><i /><i />
-                <span>{p.live ? new URL(p.live).host : "private project"}</span>
+                <span>{host}</span>
                 <button className="mon-close" onClick={() => setFull(false)}>Close ✕</button>
               </div>
-              <motion.div className="mon-full-body" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25, duration: 0.5, ease: EASE }}>
+              <motion.div className="mon-full-body" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.5, ease: EASE }}>
                 <Wire i={idx} />
                 <b>{String(idx + 1).padStart(2, "0")}</b>
                 <h3>{p.title}</h3>
@@ -1017,7 +1074,7 @@ function Contact() {
     <Morph id="contact" className="sec dark">
       <div className="wrap">
         <p className="eyebrow">( 06 ) Contact</p>
-        <DotText lines={["SAY", "HELLO"]} morph={[["SAY", "HELLO"], ["HIRE", "ME"]]} every={4200} maxFs={190} />
+        <DotText lines={["SAY", "HELLO"]} morph={[["SAY", "HELLO"], ["HIRE", "ME"]]} every={4200} maxFs={165} />
         <div className="contact-grid">
           <div>
             <p className="lead">Open to React JS and MERN developer roles. Send a message or reach me here.</p>
