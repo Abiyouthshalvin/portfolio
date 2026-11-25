@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  AnimatePresence, MotionConfig, motion, useInView, useMotionValue,
-  useMotionValueEvent, useScroll, useSpring, useTransform, useVelocity,
+  AnimatePresence, MotionConfig, motion, motionValue, useInView,
+  useMotionValueEvent, useScroll, useTransform,
 } from "framer-motion";
 import "./index.css";
 
@@ -78,628 +78,448 @@ const EXPERIENCE = [
   },
 ];
 
-const SKILLS = {
-  Languages: ["JavaScript (ES6+)", "HTML5", "CSS3", "SQL"],
-  Frontend: ["React.js", "Hooks", "Material UI", "Bootstrap", "Responsive Design"],
-  Backend: ["Node.js", "Express.js", "REST APIs", "JWT Auth", "Role-Based Access"],
-  Database: ["MongoDB", "MySQL", "Stored Procedures", "Query Optimization"],
-  Tools: ["Git", "GitHub", "VS Code", "Vercel", "Render"],
+
+/* Optional: drop a real screenshot in /public/projects/ and set its path here, e.g. "/projects/movie.png".
+   Empty = an illustrated preview is drawn instead. */
+const SHOTS = {
+  "Sanishsoft Company Website": { kind: "site", img: "" },
+  "SayuTech Business Website": { kind: "site", img: "" },
+  "Chennai Company Website": { kind: "site", img: "" },
+  "Movie Ticket Booking Application": { kind: "cinema", img: "" },
+  "E-commerce Application": { kind: "shop", img: "" },
+  "Hospital Token Management System": { kind: "queue", img: "" },
 };
 
-
-const ROLES = ["MERN Stack Developer", "React JS Developer", "Full Stack Builder"];
-const MERN = [
-  { k: "M", name: "MongoDB", text: "Schemas, aggregation, Mongoose models" },
-  { k: "E", name: "Express.js", text: "REST APIs, middleware, JWT auth" },
-  { k: "R", name: "React.js", text: "Hooks, reusable components, responsive UI" },
-  { k: "N", name: "Node.js", text: "Server logic, role-based access, deployment" },
+const SKILL_GROUPS = [
+  { title: "Frontend", glyph: "</>", hue: "blue", items: ["HTML5", "CSS3", "JavaScript", "React.js", "Redux", "Bootstrap", "jQuery"] },
+  { title: "Backend", glyph: "{ }", hue: "violet", items: ["Node.js", "Express.js", "REST APIs", "JWT Authentication"] },
+  { title: "Database", glyph: "DB", hue: "cyan", items: ["MongoDB", "MySQL"] },
+  { title: "Tools", glyph: "$_", hue: "blue", items: ["Git", "GitHub", "VS Code", "MongoDB Compass"] },
+  { title: "Also working with", glyph: "+", hue: "violet", items: ["TypeScript", "Material UI", "SQL", "Responsive Design", "Role-Based Access", "Stored Procedures"] },
 ];
+
+const MERN = [
+  { k: "M", name: "MongoDB", text: "Collections, queries and validated documents." },
+  { k: "E", name: "Express.js", text: "REST APIs, middleware and JWT-protected routes." },
+  { k: "R", name: "React.js", text: "Hooks, reusable components and responsive UI." },
+  { k: "N", name: "Node.js", text: "Server logic, role-based access and deployment." },
+];
+
+const NAV = [
+  ["home", "Home"], ["about", "About"], ["skills", "Skills"],
+  ["experience", "Experience"], ["projects", "Projects"], ["contact", "Contact"],
+];
+const SECTION_IDS = ["home", "about", "skills", "experience", "projects", "process", "contact"];
 const EASE = [0.16, 1, 0.3, 1];
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const ramp = (p, a, b) => clamp((p - a) / (b - a));
 
-/* ================= dot-matrix text: particles that fly in and dodge the cursor ================= */
-
-function DotText({ lines, morph, every = 3800, color = "#f4f4f2", maxFs = 260, align = "left", label }) {
-  const variants = morph || [lines];
-  const key = JSON.stringify(variants); // stable dependency: parent re-renders must not restart the animation
-  const wrap = useRef(null);
-  const cvs = useRef(null);
-
+/* ================= shared hooks ================= */
+function useMedia(q) {
+  const [m, setM] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
   useEffect(() => {
-    const wrapEl = wrap.current, canvas = cvs.current, ctx = canvas.getContext("2d");
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const face = '900 100px Inter, "Arial Black", Arial, sans-serif';
-    let parts = [], all = [], raf = 0, timer = 0, visible = false, started = 0, last = 0, W = 0, H = 0, builtW = 0, vi = 0;
-    const mouse = { x: -999, y: -999 };
+    const mq = window.matchMedia(q);
+    const f = () => setM(mq.matches);
+    f(); mq.addEventListener("change", f);
+    return () => mq.removeEventListener("change", f);
+  }, [q]);
+  return m;
+}
+const useReduced = () => useMedia("(prefers-reduced-motion: reduce)");
+const useCompact = () => useMedia("(max-width: 820px), (pointer: coarse)");
 
-    // Point cloud for one word-set
-    const sample = (v, gap) => {
-      const off = document.createElement("canvas");
-      off.width = W; off.height = H;
-      const o = off.getContext("2d");
-      o.font = `900 ${v.fs}px Inter, "Arial Black", Arial, sans-serif`;
-      o.fillStyle = "#fff";
-      o.textAlign = align === "center" ? "center" : "left";
-      const oy = (H - v.h) / 2;
-      v.ls.forEach((l, i) => o.fillText(l, align === "center" ? W / 2 : 2, oy + (i + 1) * v.lineH - v.fs * 0.1));
-      const data = o.getImageData(0, 0, W, H).data, pts = [];
-      for (let y = gap / 2; y < H; y += gap)
-        for (let x = gap / 2; x < W; x += gap)
-          if (data[((y | 0) * W + (x | 0)) * 4 + 3] > 140) pts.push({ x, y });
-      return pts;
-    };
-
-    // Send every dot to a spot in the next word. Dots slide left-to-right so the change reads as one shape morphing into another.
-    const assign = (pts, gap, instant) => {
-      const T = pts.length;
-      while (parts.length < T) parts.push({ x: Math.random() * W, y: Math.random() * H, vx: 0, vy: 0, a: 0, ta: 1, r: gap * 0.36, d: 0, p: Math.random() * 6.28, tx: 0, ty: 0 });
-      parts.sort((p, q) => p.x - q.x || p.y - q.y);
-      const P = parts.length;
-      let prev = -1;
-      parts.forEach((p, i) => {
-        const j = Math.min(T - 1, Math.floor((i * T) / P));
-        p.tx = pts[j].x; p.ty = pts[j].y; p.ta = j !== prev ? 1 : 0; prev = j;
-        if (instant) { p.x = p.tx; p.y = p.ty; p.a = p.ta; }
-      });
-    };
-
-    const build = () => {
-      W = wrapEl.clientWidth;
-      if (!W) return;
-      builtW = W;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const probe = document.createElement("canvas").getContext("2d");
-      probe.font = face;
-      let cap = maxFs; // every word is drawn at the first word's letter size, so the block never grows
-      const info = variants.map((ls) => {
-        const widest = Math.max(...ls.map((l) => probe.measureText(l).width));
-        const fs = Math.min(cap, ((W * 0.98) / widest) * 100), lineH = fs * 0.92;
-        if (cap === maxFs) cap = fs;
-        return { ls, fs, lineH, h: Math.ceil(ls.length * lineH + fs * 0.12) };
-      });
-      H = Math.max(...info.map((i) => i.h));
-      canvas.width = W * dpr; canvas.height = H * dpr;
-      canvas.style.width = W + "px"; canvas.style.height = H + "px";
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const gap = Math.max(4, Math.round(Math.min(...info.map((i) => i.fs)) / 24));
-      all = info.map((v) => sample(v, gap));
-      parts = [];
-      vi = 0;
-      assign(all[0], gap, false);
-      parts.forEach((p) => { p.a = 1; p.d = Math.random() * 700; if (reduce) { p.x = p.tx; p.y = p.ty; } else { p.y = (Math.random() - 0.5) * H * 3 + H / 2; } });
-      build.gap = gap;
-      started = last = performance.now();
-      draw(started);
-    };
-
-    const draw = (now) => {
-      ctx.clearRect(0, 0, W, H);
-      const t = now - started;
-      const dt = Math.min(Math.max((now - last) / 16.67, 0.5), 3);
-      last = now;
-      const base = new Path2D(), hot = new Path2D();
-      for (const p of parts) {
-        if (!reduce && t > p.d) {
-          p.vx += (p.tx - p.x) * 0.06 * dt; p.vy += (p.ty - p.y) * 0.06 * dt;
-          const dx = p.x - mouse.x, dy = p.y - mouse.y, d2 = dx * dx + dy * dy;
-          if (d2 < 11000) { const d = Math.sqrt(d2) || 1, f = (1 - d / 105) * 7; p.vx += (dx / d) * f * dt; p.vy += (dy / d) * f * dt; }
-          const damp = Math.pow(0.85, dt);
-          p.vx *= damp; p.vy *= damp; p.x += p.vx * dt; p.y += p.vy * dt;
-          p.a += (p.ta - p.a) * 0.12 * dt;
-        }
-        const rad = p.r * p.a;
-        if (rad < 0.4) continue;
-        const wob = reduce ? 0 : Math.sin(now / 700 + p.tx / 38 + p.p * 0.1) * 1.1;
-        const moving = Math.abs(p.vx) + Math.abs(p.vy) > 1.4, path = moving ? hot : base;
-        path.moveTo(p.x + rad, p.y + wob);
-        path.arc(p.x, p.y + wob, rad, 0, 6.283);
-      }
-      ctx.fillStyle = color; ctx.fill(base);
-      ctx.fillStyle = "#d71921"; ctx.fill(hot);
-      if (visible && !reduce) raf = requestAnimationFrame(draw);
-    };
-
-    const io = new IntersectionObserver(([e]) => {
-      visible = e.isIntersecting;
-      cancelAnimationFrame(raf);
-      if (visible) { if (!all.length) build(); raf = requestAnimationFrame(draw); }
-    }, { threshold: 0.05 });
-    io.observe(wrapEl);
-
-    if (variants.length > 1 && !reduce) {
-      timer = setInterval(() => {
-        if (!visible || !all.length) return;
-        vi = (vi + 1) % variants.length;
-        assign(all[vi], build.gap, false);
-      }, every);
+/* One smoothed pointer for the whole site. Mouse on desktop, touch position on phones. */
+const mx = motionValue(0), my = motionValue(0);      // -1..1, eased
+const pxv = motionValue(-999), pyv = motionValue(-999); // pixels, eased
+const target = { x: 0, y: 0, px: -999, py: -999, seen: false };
+let pointerOn = false;
+function startPointer() {
+  if (pointerOn || typeof window === "undefined") return;
+  pointerOn = true;
+  const set = (x, y) => {
+    if (!target.seen) { target.seen = true; pxv.set(x); pyv.set(y); }
+    target.px = x; target.py = y;
+    target.x = (x / window.innerWidth) * 2 - 1;
+    target.y = (y / window.innerHeight) * 2 - 1;
+  };
+  window.addEventListener("pointermove", (e) => set(e.clientX, e.clientY), { passive: true });
+  window.addEventListener("touchmove", (e) => { const t = e.touches[0]; if (t) set(t.clientX, t.clientY); }, { passive: true });
+  window.addEventListener("touchstart", (e) => { const t = e.touches[0]; if (t) set(t.clientX, t.clientY); }, { passive: true });
+  const tick = () => {
+    mx.set(mx.get() + (target.x - mx.get()) * 0.07);
+    my.set(my.get() + (target.y - my.get()) * 0.07);
+    if (target.seen) {
+      pxv.set(pxv.get() + (target.px - pxv.get()) * 0.16);
+      pyv.set(pyv.get() + (target.py - pyv.get()) * 0.16);
     }
+    requestAnimationFrame(tick);
+  };
+  tick();
+}
 
-    const move = (e) => {
-      const r = canvas.getBoundingClientRect(), pt = e.touches ? e.touches[0] : e;
-      mouse.x = pt.clientX - r.left; mouse.y = pt.clientY - r.top;
+/* Scroll offsets (px) of the main sections, used to move the fixed 3D model between them. */
+function useSectionTops() {
+  const [tops, setTops] = useState(null);
+  useEffect(() => {
+    const measure = () => {
+      const y = window.scrollY;
+      const t = ["home", "about", "skills", "experience", "projects"].map((id) => {
+        const el = document.getElementById(id);
+        return el ? Math.round(el.getBoundingClientRect().top + y) : 0;
+      });
+      setTops((p) => (p && p.join() === t.join() ? p : t));
     };
-    const ro = new ResizeObserver(() => {
-      if (wrapEl.clientWidth === builtW) return;
-      cancelAnimationFrame(raf); build();
-      if (visible && !reduce) raf = requestAnimationFrame(draw);
-    });
-    ro.observe(wrapEl);
-    window.addEventListener("mousemove", move);
-    window.addEventListener("touchmove", move, { passive: true });
-    return () => {
-      cancelAnimationFrame(raf); clearInterval(timer); io.disconnect(); ro.disconnect();
-      window.removeEventListener("mousemove", move); window.removeEventListener("touchmove", move);
-    };
-  }, [key, color, maxFs, align, every]); // eslint-disable-line react-hooks/exhaustive-deps
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(document.body);
+    window.addEventListener("resize", measure);
+    document.fonts?.ready.then(measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, []);
+  return tops;
+}
 
+/* ================= small building blocks ================= */
+function Magnetic({ children, strength = 0.35 }) {
+  const ref = useRef(null);
+  const compact = useCompact();
+  const move = (e) => {
+    if (compact) return;
+    const r = ref.current.getBoundingClientRect();
+    const dx = (e.clientX - (r.left + r.width / 2)) * strength;
+    const dy = (e.clientY - (r.top + r.height / 2)) * strength;
+    ref.current.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+  };
+  const leave = () => { ref.current.style.transform = ""; };
+  return <span ref={ref} className="mag" onPointerMove={move} onPointerLeave={leave}>{children}</span>;
+}
+
+function Tilt({ children, className = "", max = 9, zoom = 1.04, active = true }) {
+  const ref = useRef(null);
+  const compact = useCompact();
+  const move = (e) => {
+    if (compact || !active) return;
+    const el = ref.current, r = el.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+    el.style.setProperty("--rx", `${((0.5 - y) * max * 2).toFixed(2)}deg`);
+    el.style.setProperty("--ry", `${((x - 0.5) * max * 2).toFixed(2)}deg`);
+    el.style.setProperty("--gx", `${(x * 100).toFixed(1)}%`);
+    el.style.setProperty("--gy", `${(y * 100).toFixed(1)}%`);
+  };
+  const leave = () => {
+    const s = ref.current.style;
+    s.setProperty("--rx", "0deg"); s.setProperty("--ry", "0deg");
+  };
   return (
-    <div ref={wrap} className="dottext" role="img" aria-label={label || variants[0].join(" ")}>
-      <canvas ref={cvs} aria-hidden="true" />
+    <div ref={ref} className={`tilt ${className}`} style={{ "--z": zoom }} onPointerMove={move} onPointerLeave={leave}>
+      {children}
+      <span className="tilt-glare" aria-hidden="true" />
     </div>
   );
 }
 
-/* Section that morphs as it scrolls in: shrunk, rounded card that grows to full-bleed */
-function Morph({ id, className, children }) {
+/* Line-by-line reveal: measures the real wrapped lines and staggers them. */
+function Lines({ text, as: Tag = "p", className = "", delay = 0, play, stagger = 0.1 }) {
   const ref = useRef(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "start 0.2"] });
-  const scale = useTransform(scrollYProgress, [0, 1], [0.86, 1]);
-  const borderRadius = useTransform(scrollYProgress, [0, 1], [80, 0]);
-  return (
-    <motion.section id={id} ref={ref} className={className} style={{ scale, borderRadius, transformOrigin: "50% 100%" }}>
-      {children}
-    </motion.section>
-  );
-}
-
-/* ================= small helpers ================= */
-
-function Preloader({ onDone }) {
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setN((v) => Math.min(v + 2, 100)), 22);
-    return () => clearInterval(id);
-  }, []);
-  useEffect(() => {
-    if (n === 100) { const t = setTimeout(onDone, 300); return () => clearTimeout(t); }
-  }, [n, onDone]);
-  return (
-    <motion.div className="preloader" exit={{ clipPath: "circle(0% at 50% 50%)" }} transition={{ duration: 0.9, ease: EASE }}>
-      <div className="pre-dots" aria-hidden="true">
-        {Array.from({ length: 25 }).map((_, i) => (
-          <i key={i} style={{ opacity: n / 100 * 25 > i ? 1 : 0.12, background: i === 12 ? "#d71921" : undefined }} />
-        ))}
-      </div>
-      <p>{String(n).padStart(3, "0")} / 100</p>
-    </motion.div>
-  );
-}
-
-function Cursor() {
-  const x = useMotionValue(-100), y = useMotionValue(-100);
-  const sx = useSpring(x, { stiffness: 450, damping: 38, mass: 0.4 });
-  const sy = useSpring(y, { stiffness: 450, damping: 38, mass: 0.4 });
-  const [big, setBig] = useState(false);
-  const [fine, setFine] = useState(false);
-  useEffect(() => {
-    setFine(window.matchMedia("(hover: hover) and (pointer: fine)").matches);
-    const move = (e) => { x.set(e.clientX); y.set(e.clientY); };
-    const over = (e) => setBig(!!e.target.closest?.("a, button, input, textarea, .grow"));
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseover", over);
-    return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseover", over); };
-  }, [x, y]);
-  if (!fine) return null;
-  return (
-    <>
-      <motion.div className="cursor" style={{ x: sx, y: sy }} animate={{ scale: big ? 2.6 : 1 }} transition={{ duration: 0.2 }} />
-      <motion.div className="cursor-dot" style={{ x, y }} />
-    </>
-  );
-}
-
-function Magnetic({ children, strength = 0.3 }) {
-  const ref = useRef(null);
-  const x = useSpring(0, { stiffness: 200, damping: 15 });
-  const y = useSpring(0, { stiffness: 200, damping: 15 });
-  const move = (e) => {
-    const r = ref.current.getBoundingClientRect();
-    x.set((e.clientX - (r.left + r.width / 2)) * strength);
-    y.set((e.clientY - (r.top + r.height / 2)) * strength);
-  };
-  return (
-    <motion.div ref={ref} className="magnet" style={{ x, y }} onMouseMove={move} onMouseLeave={() => { x.set(0); y.set(0); }}>
-      {children}
-    </motion.div>
-  );
-}
-
-function Word({ children, progress, range }) {
-  const opacity = useTransform(progress, range, [0.18, 1]);
-  return <motion.span style={{ opacity }}>{children} </motion.span>;
-}
-function ScrollText({ text }) {
-  const ref = useRef(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start 0.9", "end 0.55"] });
+  const [lines, setLines] = useState(null);
+  const seen = useInView(ref, { once: true, margin: "0px 0px -12% 0px" });
   const words = text.split(" ");
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      let top = null, n = -1;
+      const out = [...el.querySelectorAll(".lr-m")].map((w) => {
+        if (top === null || Math.abs(w.offsetTop - top) > 4) { top = w.offsetTop; n++; }
+        return n;
+      });
+      setLines((p) => (p && p.join() === out.join() ? p : out));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    document.fonts?.ready.then(measure);
+    return () => ro.disconnect();
+  }, [text]);
+  const on = play === undefined ? seen : play;
   return (
-    <p ref={ref} className="scroll-text">
-      {words.map((w, i) => <Word key={i} progress={scrollYProgress} range={[i / words.length, (i + 1) / words.length]}>{w}</Word>)}
-    </p>
+    <Tag ref={ref} className={`lr ${on ? "on" : ""} ${className}`} aria-label={text}>
+      {words.map((w, i) => (
+        <span key={i}>
+          <span className="lr-m" aria-hidden="true">
+            <span className="lr-w" style={{ transitionDelay: `${delay + (lines ? lines[i] : 0) * stagger}s` }}>{w}</span>
+          </span>{" "}
+        </span>
+      ))}
+    </Tag>
+  );
+}
+
+/* Headings where every line is written out explicitly. */
+function HeadLines({ lines, as: Tag = "h2", className = "", delay = 0, now = false }) {
+  const ref = useRef(null);
+  const seen = useInView(ref, { once: true, margin: "0px 0px -10% 0px" });
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 80); return () => clearTimeout(t); }, []);
+  const on = now ? mounted : seen;
+  return (
+    <Tag ref={ref} className={`hl ${on ? "on" : ""} ${className}`}>
+      {lines.map((l, i) => (
+        <span className="hl-m" key={i}>
+          <span className="hl-l" style={{ transitionDelay: `${delay + i * 0.12}s` }}>{l}</span>
+        </span>
+      ))}
+    </Tag>
   );
 }
 
 function CountUp({ to, suffix = "" }) {
   const ref = useRef(null);
-  const inView = useInView(ref, { once: true });
-  const [n, setN] = useState(0);
+  const seen = useInView(ref, { once: true });
+  const reduce = useReduced();
+  const [v, setV] = useState(reduce ? to : 0);
   useEffect(() => {
-    if (!inView) return;
-    let raf; const start = performance.now();
-    const tick = (t) => {
-      const p = Math.min((t - start) / 1400, 1);
-      setN(Math.round(to * (1 - Math.pow(1 - p, 3))));
-      if (p < 1) raf = requestAnimationFrame(tick);
+    if (!seen || reduce) { if (reduce) setV(to); return; }
+    let raf, t0;
+    const step = (t) => {
+      t0 = t0 ?? t;
+      const k = clamp((t - t0) / 1400);
+      setV(Math.round(to * (1 - Math.pow(1 - k, 3))));
+      if (k < 1) raf = requestAnimationFrame(step);
     };
-    raf = requestAnimationFrame(tick);
+    raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [inView, to]);
-  return <span ref={ref}>{n}{suffix}</span>;
+  }, [seen, to, reduce]);
+  return <span ref={ref}>{v}{suffix}</span>;
 }
 
-function useTyping(words) {
-  const [text, setText] = useState("");
-  const [del, setDel] = useState(false);
-  const [i, setI] = useState(0);
+const reveal = (i = 0) => ({
+  initial: { opacity: 0, y: 44 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true, margin: "-8% 0px" },
+  transition: { duration: 0.85, delay: i * 0.08, ease: EASE },
+});
+
+function Eyebrow({ n, children }) {
+  return <p className="eyebrow"><span>{n}</span><i />{children}</p>;
+}
+
+/* drag / swipe for the carousels (mouse + touch), no listeners on the cards themselves */
+function useDrag(onStep, threshold = 60) {
+  const [dx, setDx] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const start = useRef(null);
+  const moved = useRef(false);
+  const stepRef = useRef(onStep);
+  stepRef.current = onStep;
   useEffect(() => {
-    const word = words[i % words.length];
-    let delay = del ? 30 : 70;
-    if (!del && text === word) delay = 1400;
-    const t = setTimeout(() => {
-      if (!del && text === word) setDel(true);
-      else if (del && text === "") { setDel(false); setI(i + 1); }
-      else setText(del ? word.slice(0, text.length - 1) : word.slice(0, text.length + 1));
-    }, delay);
-    return () => clearTimeout(t);
-  }, [text, del, i, words]);
-  return text;
+    if (!dragging) return;
+    const move = (e) => {
+      const d = e.clientX - start.current;
+      if (Math.abs(d) > 6) moved.current = true;
+      setDx(d);
+    };
+    const up = (e) => {
+      const d = e.clientX - start.current;
+      if (Math.abs(d) > threshold) stepRef.current(d < 0 ? 1 : -1);
+      setDragging(false); setDx(0);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+  }, [dragging, threshold]);
+  const bind = {
+    onPointerDown: (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      start.current = e.clientX; moved.current = false; setDragging(true);
+    },
+    onClickCapture: (e) => { if (moved.current) { e.preventDefault(); e.stopPropagation(); moved.current = false; } },
+  };
+  return { dx, dragging, bind };
 }
 
-function DubaiClock() {
-  const fmt = () => new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Dubai", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date());
-  const [t, setT] = useState(fmt());
-  useEffect(() => { const id = setInterval(() => setT(fmt()), 1000); return () => clearInterval(id); }, []);
-  return <time>{t}</time>;
-}
-
-function Marquee({ items, reverse = false }) {
-  const row = [...items, ...items];
-  const { scrollY } = useScroll();
-  const smooth = useSpring(useVelocity(scrollY), { stiffness: 200, damping: 40 });
-  const skewX = useTransform(smooth, [-2500, 2500], [-12, 12]);
+/* ================= site-wide mouse / touch effects ================= */
+function Cursor() {
+  const fine = useMedia("(hover: hover) and (pointer: fine)");
+  const [hot, setHot] = useState(false);
+  useEffect(() => {
+    if (!fine) return;
+    const over = (e) => setHot(!!e.target.closest?.("a, button, input, textarea, [data-hot]"));
+    window.addEventListener("pointerover", over, { passive: true });
+    return () => window.removeEventListener("pointerover", over);
+  }, [fine]);
+  if (!fine) return null;
   return (
-    <motion.div className="marquee" style={{ skewX }} aria-hidden="true">
-      <div className={`track${reverse ? " rev" : ""}`}>
-        {row.map((t, i) => <span key={i}>{t}<i /></span>)}
-      </div>
-    </motion.div>
+    <>
+      <motion.div className={`cursor ${hot ? "hot" : ""}`} style={{ x: pxv, y: pyv }} aria-hidden="true" />
+      <motion.div className="cursor-dot" style={{ x: pxv, y: pyv }} aria-hidden="true" />
+    </>
   );
+}
+
+function Spotlight() {
+  return <motion.div className="spot" style={{ x: pxv, y: pyv }} aria-hidden="true" />;
+}
+
+function Particles() {
+  const ref = useRef(null);
+  const compact = useCompact();
+  const reduce = useReduced();
+  useEffect(() => {
+    const c = ref.current, ctx = c.getContext("2d");
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    let W = 0, H = 0, raf = 0, on = true;
+    const cols = ["79,124,255", "139,92,246", "34,211,238"];
+    const N = reduce ? 28 : compact ? 34 : 72;
+    let parts = [];
+    const resize = () => {
+      W = window.innerWidth; H = window.innerHeight;
+      c.width = W * dpr; c.height = H * dpr;
+      c.style.width = W + "px"; c.style.height = H + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    parts = Array.from({ length: N }, (_, i) => ({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.28, vy: (Math.random() - 0.5) * 0.28,
+      r: Math.random() * 1.5 + 0.7, col: cols[i % 3],
+    }));
+    const draw = (move) => {
+      ctx.clearRect(0, 0, W, H);
+      const { px, py } = target;
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
+        if (move) {
+          p.x += p.vx; p.y += p.vy;
+          const dx = p.x - px, dy = p.y - py, d2 = dx * dx + dy * dy;
+          if (d2 < 26000) { const d = Math.sqrt(d2) || 1, f = (1 - d2 / 26000) * 2.2; p.x += (dx / d) * f; p.y += (dy / d) * f; }
+          if (p.x < -10) p.x = W + 10; if (p.x > W + 10) p.x = -10;
+          if (p.y < -10) p.y = H + 10; if (p.y > H + 10) p.y = -10;
+        }
+        ctx.fillStyle = `rgba(${p.col},0.75)`;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.283); ctx.fill();
+        if (!compact) for (let j = i + 1; j < parts.length; j++) {
+          const q = parts[j], ex = p.x - q.x, ey = p.y - q.y, e2 = ex * ex + ey * ey;
+          if (e2 < 11000) { ctx.strokeStyle = `rgba(${p.col},${0.16 * (1 - e2 / 11000)})`; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke(); }
+        }
+      }
+    };
+    const loop = () => { if (on) draw(true); raf = requestAnimationFrame(loop); };
+    if (reduce) draw(false); else loop();
+    const vis = () => { on = !document.hidden; };
+    document.addEventListener("visibilitychange", vis);
+    window.addEventListener("resize", resize);
+    return () => { cancelAnimationFrame(raf); document.removeEventListener("visibilitychange", vis); window.removeEventListener("resize", resize); };
+  }, [compact, reduce]);
+  return <canvas ref={ref} className="particles" aria-hidden="true" />;
 }
 
 function ProgressBar() {
   const { scrollYProgress } = useScroll();
-  const scaleX = useSpring(scrollYProgress, { stiffness: 140, damping: 24 });
-  return <motion.div className="progress" style={{ scaleX }} />;
+  return <motion.div className="progress" style={{ scaleX: scrollYProgress }} />;
 }
 
-// Glyph strip: a column of LEDs that light up as you scroll
-function Glyph() {
-  const { scrollYProgress } = useScroll();
-  const [lit, setLit] = useState(0);
-  useMotionValueEvent(scrollYProgress, "change", (v) => setLit(Math.round(v * 14)));
+/* ================= fixed 3D model (CSS 3D laptop, follows you through Hero > About > Skills) ================= */
+function Model3D() {
+  const tops = useSectionTops();
+  const compact = useCompact();
+  const reduce = useReduced();
+  const { scrollY } = useScroll();
+  const W = typeof window !== "undefined" ? window.innerWidth : 1280;
+  const H = typeof window !== "undefined" ? window.innerHeight : 800;
+  const t = tops || [0, H, H * 2, H * 3, H * 4];
+  const marks = [0, t[1], Math.max(t[1] + 1, t[2] - H * 0.9), Math.max(t[1] + 2, t[2]), Math.max(t[1] + 3, t[3] + H * 0.15)];
+  // keep the marks strictly increasing
+  for (let i = 1; i < marks.length; i++) if (marks[i] <= marks[i - 1]) marks[i] = marks[i - 1] + 1;
+  const xs = compact ? [0.22 * W, 0.26 * W, 0.26 * W, 0.26 * W, 0.26 * W] : [0.24 * W, -0.27 * W, -0.27 * W, 0.37 * W, 0.37 * W];
+  const ys = compact ? [-0.22 * H, -0.3 * H, -0.3 * H, -0.34 * H, -0.34 * H] : [0.02 * H, 0.22 * H, 0.22 * H, -0.3 * H, -0.3 * H];
+  const ss = compact ? [0.55, 0.4, 0.4, 0.34, 0.34] : [1.1, 0.74, 0.74, 0.42, 0.42];
+  const os = compact ? [0.4, 0.2, 0.15, 0, 0] : [1, 0.95, 0.9, 0.55, 0];
+  const x = useTransform(scrollY, marks, xs);
+  const y = useTransform(scrollY, marks, ys);
+  const scale = useTransform(scrollY, marks, ss);
+  const opacity = useTransform(scrollY, marks, os);
+  const spin = useTransform(scrollY, [0, 4000], reduce ? [0, 0] : [0, 160]);
+  const ry0 = useTransform(mx, [-1, 1], reduce ? [0, 0] : [-26, 26]);
+  const rx0 = useTransform(my, [-1, 1], reduce ? [0, 0] : [10, -10]);
+  const ry = useTransform([ry0, spin], ([a, b]) => a + Math.sin((b * Math.PI) / 180) * 18);
   return (
-    <div className="glyph" aria-hidden="true">
-      {Array.from({ length: 14 }).map((_, i) => <i key={i} className={i < lit ? "on" : ""} />)}
-    </div>
-  );
-}
-
-const reveal = (i = 0) => ({
-  initial: { opacity: 0, y: 40, scale: 0.97 },
-  whileInView: { opacity: 1, y: 0, scale: 1 },
-  viewport: { once: true, amount: 0.25 },
-  transition: { duration: 0.7, ease: EASE, delay: i * 0.08 },
-});
-
-/* ================= graphics ================= */
-
-// Hero backdrop: grid of dots that swell and glow red around the cursor
-function DotGrid() {
-  const ref = useRef(null);
-  useEffect(() => {
-    const c = ref.current, ctx = c.getContext("2d");
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let W = 0, H = 0, raf = 0, vis = false;
-    const m = { x: -999, y: -999 };
-    const size = () => {
-      const r = c.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
-      W = r.width; H = r.height; c.width = W * dpr; c.height = H * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    const draw = (t) => {
-      ctx.clearRect(0, 0, W, H);
-      const S = 30;
-      for (let y = S / 2; y < H; y += S) {
-        for (let x = S / 2; x < W; x += S) {
-          const near = Math.max(0, 1 - Math.hypot(x - m.x, y - m.y) / 200);
-          const w = reduce ? 0.3 : (Math.sin(t / 1100 + x * 0.012 + y * 0.008) + 1) / 2;
-          ctx.fillStyle = near > 0.45 ? `rgba(215,25,33,${0.35 + near * 0.65})` : `rgba(255,255,255,${0.09 + w * 0.12 + near * 0.5})`;
-          ctx.beginPath(); ctx.arc(x, y, 1 + w * 0.9 + near * 4.2, 0, 6.283); ctx.fill();
-        }
-      }
-      if (vis && !reduce) raf = requestAnimationFrame(draw);
-    };
-    size(); draw(0);
-    const io = new IntersectionObserver(([e]) => { vis = e.isIntersecting; cancelAnimationFrame(raf); if (vis) raf = requestAnimationFrame(draw); });
-    io.observe(c);
-    const ro = new ResizeObserver(() => { size(); if (reduce) draw(0); });
-    ro.observe(c);
-    const move = (e) => { const r = c.getBoundingClientRect(); m.x = e.clientX - r.left; m.y = e.clientY - r.top; };
-    window.addEventListener("mousemove", move);
-    return () => { cancelAnimationFrame(raf); io.disconnect(); ro.disconnect(); window.removeEventListener("mousemove", move); };
-  }, []);
-  return <canvas ref={ref} className="dotgrid" aria-hidden="true" />;
-}
-
-// Rotating dotted globe with a pulsing marker on Dubai and M-E-R-N nodes orbiting it
-const CODE = [
-  "const dev = {",
-  '  name: "Abiyouth Shalvin",',
-  '  role: "MERN Stack Developer",',
-  '  stack: ["MongoDB", "Express", "React", "Node"],',
-  '  location: "Dubai, UAE",',
-  "  openToWork: true,",
-  "};",
-  "",
-  'dev.build("something great");',
-];
-function colorize(line) {
-  return line.split(/("[^"]*"?|\bconst\b|\btrue\b)/).map((t, i) => {
-    if (t.startsWith('"')) return <span key={i} className="t-s">{t}</span>;
-    if (t === "const" || t === "true") return <span key={i} className="t-k">{t}</span>;
-    return t;
-  });
-}
-// Code window that types itself out when scrolled into view
-function Terminal() {
-  const ref = useRef(null);
-  const inView = useInView(ref, { once: true, amount: 0.4 });
-  const full = CODE.join("\n");
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    if (!inView) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setN(full.length); return; }
-    const id = setInterval(() => setN((v) => (v >= full.length ? v : v + 1)), 28);
-    return () => clearInterval(id);
-  }, [inView, full.length]);
-  const lines = full.slice(0, n).split("\n");
-  return (
-    <div className="terminal" ref={ref} aria-label="Code snippet describing Abiyouth Shalvin" role="img">
-      <div className="t-bar"><i className="r" /><i /><i /><span>dev.js</span></div>
-      <pre>
-        {lines.map((l, i) => (
-          <div className="t-line" key={i}><em>{i + 1}</em><span>{colorize(l)}{i === lines.length - 1 && <b className="caret">▍</b>}</span></div>
-        ))}
-      </pre>
-    </div>
-  );
-}
-
-function Badge() {
-  return (
-    <svg viewBox="0 0 200 200" className="badge" aria-hidden="true">
-      <defs><path id="badge-circle" d="M100,100 m-76,0 a76,76 0 1,1 152,0 a76,76 0 1,1 -152,0" /></defs>
-      <g className="badge-spin">
-        <text><textPath href="#badge-circle" textLength="470" lengthAdjust="spacing">OPEN TO WORK • MERN DEVELOPER • DUBAI, UAE • </textPath></text>
-      </g>
-      <circle cx="100" cy="100" r="14" fill="#d71921" className="badge-dot" />
-    </svg>
-  );
-}
-
-// Giant words that slide sideways as you scroll
-function BigWords() {
-  const ref = useRef(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
-  const x1 = useTransform(scrollYProgress, [0, 1], ["12%", "-48%"]);
-  const x2 = useTransform(scrollYProgress, [0, 1], ["-48%", "12%"]);
-  return (
-    <div className="bigwords dark" ref={ref} aria-hidden="true">
-      <motion.div className="bw outline" style={{ x: x1 }}>MONGODB • EXPRESS • REACT • NODE • MONGODB • EXPRESS •</motion.div>
-      <motion.div className="bw" style={{ x: x2 }}>FULL STACK • DEVELOPER • DUBAI • FULL STACK • DEVELOPER •</motion.div>
-    </div>
-  );
-}
-
-// Little website wireframes drawn on the monitor screen, one layout per project
-const WIRES = [
-  [[0, 0, 12, 1], [0, 1, 12, 3, 1], [0, 4, 4, 3], [4, 4, 4, 3], [8, 4, 4, 3]],
-  [[0, 0, 12, 1], [0, 1, 3, 4, 1], [3, 1, 3, 4], [6, 1, 3, 4], [9, 1, 3, 4], [0, 5, 12, 2]],
-  [[0, 0, 12, 1], [0, 1, 3, 6], [3, 1, 3, 2, 1], [6, 1, 3, 2], [9, 1, 3, 2], [3, 3, 3, 2], [6, 3, 3, 2], [9, 3, 3, 2], [3, 5, 9, 2]],
-  [[0, 0, 3, 7], [3, 0, 9, 1], [3, 1, 4, 3, 1], [7, 1, 5, 3], [3, 4, 9, 3]],
-];
-function Wire({ i }) {
-  const w = WIRES[i % WIRES.length];
-  return (
-    <div className="wire" aria-hidden="true">
-      {w.map(([c, r, cw, rh, hot], k) => (
-        <motion.i key={`${i}-${k}`} className={hot ? "hot" : ""} style={{ gridColumn: `${c + 1} / span ${cw}`, gridRow: `${r + 1} / span ${rh}` }}
-          initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: k * 0.06, duration: 0.4, ease: EASE }} />
-      ))}
-    </div>
-  );
-}
-
-// Cards lean toward the cursor (uses the CSS `rotate` property so it never fights framer-motion's transform)
-function useTilt() {
-  useEffect(() => {
-    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    let el = null;
-    const reset = () => { if (el) { el.style.rotate = ""; el = null; } };
-    const move = (e) => {
-      const t = e.target.closest?.(".card");
-      if (t !== el) { reset(); el = t; }
-      if (!el) return;
-      const r = el.getBoundingClientRect(), px = (e.clientX - r.left) / r.width - 0.5, py = (e.clientY - r.top) / r.height - 0.5;
-      const rx = -py * 9, ry = px * 9, ang = Math.hypot(rx, ry);
-      el.style.rotate = ang ? `${rx / ang} ${ry / ang} 0 ${ang}deg` : "";
-    };
-    window.addEventListener("pointermove", move);
-    return () => { window.removeEventListener("pointermove", move); reset(); };
-  }, []);
-}
-
-
-/* ================= hero: MERN request flow (packets that transform at every hop) ================= */
-const FLOW_NODES = [["R", "React", "UI"], ["E", "Express", "API"], ["N", "Node.js", "SERVER"], ["M", "MongoDB", "DATABASE"]];
-const FLOW_STEPS = [
-  { p: 0, t: "onClick()", s: "pill" }, { p: 1, t: "GET /api/movies", s: "square" },
-  { p: 2, t: "controller()", s: "diamond" }, { p: 3, t: "find({})", s: "pill" },
-  { p: 3, t: "{ _id, title }", s: "square", back: true }, { p: 2, t: "JSON.stringify", s: "diamond", back: true },
-  { p: 1, t: "200 OK", s: "pill", back: true }, { p: 0, t: "<MovieCard />", s: "square", back: true },
-];
-function StackFlow() {
-  const [i, setI] = useState(0);
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const id = setInterval(() => setI((v) => (v + 1) % FLOW_STEPS.length), 1300);
-    return () => clearInterval(id);
-  }, []);
-  const st = FLOW_STEPS[i];
-  return (
-    <motion.div className="flow" aria-label="MERN request flow: React, Express, Node.js, MongoDB" role="img" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.3, duration: 0.8, ease: EASE }}>
-      <div className="flow-track"><i className="flow-fill" style={{ width: `${(st.p / 3) * 100}%` }} /></div>
-      <div className="flow-pkt" style={{ left: `calc(12.5% + ${st.p * 25}%)` }}>
-        <span key={i} className={`chip ${st.s} ${st.back ? "resp" : ""}`}>{st.t}</span>
-        <b className={`flow-dot ${st.back ? "resp" : ""}`} />
-      </div>
-      <div className="flow-nodes">
-        {FLOW_NODES.map(([l, name, role], n) => (
-          <div key={name} className={`flow-node ${st.p === n ? "on" : ""}`}>
-            <span className="ic">{l}</span>
-            <strong>{name}</strong>
-            <small>{role}</small>
+    <motion.div className="m3d" style={{ x, y, scale, opacity }} aria-hidden="true">
+      <motion.div className="m3d-rot" style={{ rotateX: rx0, rotateY: ry }}>
+        <div className="lp-glow" />
+        <div className="lp">
+          <div className="lp-screen">
+            <div className="lp-bar"><i /><i /><i /><span>server.js</span></div>
+            <div className="lp-code">
+              <div className="lp-scroll">
+                {[...CODE_LINES, ...CODE_LINES].map((l, i) => (
+                  <p key={i} style={{ "--w": l[0], paddingLeft: l[1] * 12 }}><b className={l[2]} style={{ width: `${l[0]}%` }} /></p>
+                ))}
+              </div>
+            </div>
           </div>
-        ))}
-      </div>
+          <div className="lp-base"><span /></div>
+        </div>
+        <div className="orbit o1"><i /></div>
+        <div className="orbit o2"><i /></div>
+      </motion.div>
     </motion.div>
   );
 }
-
-// text that decodes itself whenever it changes
-function Scramble({ text }) {
-  const [out, setOut] = useState(text);
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setOut(text); return; }
-    const chars = "01<>{}/#_[]";
-    let f = 0;
-    const id = setInterval(() => {
-      f++;
-      setOut(text.split("").map((c, k) => (c === " " || k < f / 2 ? c : chars[(Math.random() * chars.length) | 0])).join(""));
-      if (f > text.length * 2) { clearInterval(id); setOut(text); }
-    }, 32);
-    return () => clearInterval(id);
-  }, [text]);
-  return <span aria-label={text}>{out}</span>;
-}
-
-/* ================= sections ================= */
-
-const NAV = [
-  ["home", "Home"], ["about", "About"], ["education", "Education"], ["experience", "Experience"],
-  ["projects", "Projects"], ["skills", "Skills"], ["contact", "Contact"],
+const CODE_LINES = [
+  [46, 0, "b"], [30, 1, "v"], [58, 1, "c"], [38, 2, "b"], [64, 2, "v"], [24, 1, "c"], [52, 1, "b"], [34, 2, "c"],
+  [70, 2, "v"], [28, 1, "b"], [44, 0, "c"], [56, 1, "v"],
 ];
 
+/* ================= navigation ================= */
 function Nav() {
   const [active, setActive] = useState("home");
   const [open, setOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-  const [hover, setHover] = useState(false);
-  const [vw, setVw] = useState(typeof window === "undefined" ? 1280 : window.innerWidth);
-  const ref = useRef(null);
   useEffect(() => {
-    const onScroll = () => {
-      let cur = NAV[0][0];
-      for (const [id] of NAV) {
-        const s = document.getElementById(id);
-        if (s && s.getBoundingClientRect().top <= 200) cur = id;
-      }
-      setActive(cur);
-      setScrolled(window.scrollY > 80);
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      ref.current?.style.setProperty("--p", max > 0 ? Math.min(1, window.scrollY / max).toFixed(3) : "0");
+    const on = () => {
+      const y = window.scrollY + window.innerHeight * 0.4;
+      let cur = "home";
+      SECTION_IDS.forEach((id) => { const el = document.getElementById(id); if (el && el.getBoundingClientRect().top + window.scrollY <= y) cur = id; });
+      setActive(cur === "process" ? "projects" : cur);
     };
-    const onResize = () => setVw(window.innerWidth);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onResize);
-    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onResize); };
+    on();
+    window.addEventListener("scroll", on, { passive: true });
+    window.addEventListener("resize", on);
+    return () => { window.removeEventListener("scroll", on); window.removeEventListener("resize", on); };
   }, []);
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     const esc = (e) => e.key === "Escape" && setOpen(false);
     window.addEventListener("keydown", esc);
-    return () => window.removeEventListener("keydown", esc);
+    return () => { window.removeEventListener("keydown", esc); document.body.style.overflow = ""; };
   }, [open]);
-
-  const wide = vw >= 900;
-  const expanded = wide && (!scrolled || hover);
-  const full = Math.min(880, vw - 32);
-  const width = wide ? (expanded ? full : 300) : full;
-  const idx = Math.max(0, NAV.findIndex(([id]) => id === active));
-  const label = NAV[idx][1];
-
   return (
     <>
-      <motion.header
-        ref={ref}
-        className={`nav ${expanded ? "is-open" : "is-compact"}`}
-        initial={{ y: -90, opacity: 0, width }}
-        animate={{ y: 0, opacity: 1, width }}
-        transition={{ duration: 0.6, ease: EASE, y: { duration: 0.8, delay: 0.3 }, opacity: { duration: 0.8, delay: 0.3 } }}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        onFocus={() => setHover(true)}
-        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setHover(false); }}
-      >
-        <a className="logo" href="#home"><i />AS</a>
-        <div className="nav-mid">
-          <AnimatePresence mode="wait" initial={false}>
-            {expanded ? (
-              <motion.nav key="links" className="nav-links" aria-label="Primary" initial={{ opacity: 0, filter: "blur(8px)", scale: 0.92 }} animate={{ opacity: 1, filter: "blur(0px)", scale: 1 }} exit={{ opacity: 0, filter: "blur(8px)", scale: 0.92 }} transition={{ duration: 0.3, ease: EASE }}>
-                {NAV.map(([id, l]) => (
-                  <a key={id} href={`#${id}`} className={active === id ? "on" : ""}>
-                    {active === id && <motion.span layoutId="nav-pill" className="nav-pill" transition={{ duration: 0.35, ease: EASE }} />}
-                    <span className="nav-txt">{l}</span>
-                  </a>
-                ))}
-              </motion.nav>
-            ) : (
-              <motion.button key="now" type="button" className="nav-now" aria-label={`Current section: ${label}. Open menu`} onClick={() => (wide ? setHover(true) : setOpen(true))} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.25, ease: EASE }}>
-                <em>{String(idx + 1).padStart(2, "0")}/{String(NAV.length).padStart(2, "0")}</em>
-                <Scramble text={label.toUpperCase()} />
-              </motion.button>
-            )}
-          </AnimatePresence>
-        </div>
-        <svg className="nav-ring" viewBox="0 0 36 36" aria-hidden="true"><circle className="ring-bg" cx="18" cy="18" r="14" /><circle className="ring-fg" cx="18" cy="18" r="14" /></svg>
-        {!wide && <button className="menu-btn" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Close" : "Menu"}</button>}
+      <motion.header className="nav" initial={{ y: -80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.9, ease: EASE, delay: 0.2 }}>
+        <a className="logo" href="#home" aria-label="Abiyouth Shalvin, home"><span className="logo-mark">A</span><b>Abiyouth</b></a>
+        <nav className="nav-links" aria-label="Primary">
+          {NAV.map(([id, label]) => (
+            <a key={id} href={`#${id}`} className={active === id ? "on" : ""} aria-current={active === id ? "true" : undefined}>
+              {active === id && <motion.span layoutId="navpill" className="nav-pill" transition={{ type: "spring", stiffness: 380, damping: 32 }} />}
+              <span className="nav-txt">{label}</span>
+            </a>
+          ))}
+        </nav>
+        <button className="burger" aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open} onClick={() => setOpen(!open)}>
+          <i className={open ? "x" : ""} /><i className={open ? "x" : ""} />
+        </button>
       </motion.header>
       <AnimatePresence>
         {open && (
-          <motion.div className="overlay" initial={{ clipPath: "circle(0% at 90% 4%)" }} animate={{ clipPath: "circle(150% at 90% 4%)" }} exit={{ clipPath: "circle(0% at 90% 4%)" }} transition={{ duration: 0.6, ease: EASE }}>
-            {NAV.map(([id, l], i) => (
-              <motion.a key={id} href={`#${id}`} onClick={() => setOpen(false)} initial={{ x: -40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.15 + i * 0.06, duration: 0.5, ease: EASE }}>
-                <em>{String(i + 1).padStart(2, "0")}</em>{l}
+          <motion.div className="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+            {NAV.map(([id, label], i) => (
+              <motion.a key={id} href={`#${id}`} onClick={() => setOpen(false)} initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.05 * i + 0.05, duration: 0.5, ease: EASE }}>
+                <small>0{i + 1}</small>{label}
               </motion.a>
             ))}
           </motion.div>
@@ -709,300 +529,623 @@ function Nav() {
   );
 }
 
-function Hero() {
-  const role = useTyping(ROLES);
-  const ref = useRef(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
-  const y = useTransform(scrollYProgress, [0, 1], [0, 140]);
-  const fade = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
+/* ================= HERO: layered parallax ================= */
+function Floater({ scroll, d, cls = "", style, children }) {
+  const reduce = useReduced();
+  const y = useTransform(scroll, [0, 1], reduce ? [0, 0] : [0, -300 * d]);
+  const px = useTransform(mx, [-1, 1], reduce ? [0, 0] : [-40 * d, 40 * d]);   // opposite to the cursor
+  const py = useTransform(my, [-1, 1], reduce ? [0, 0] : [-28 * d, 28 * d]);
   return (
-    <section id="home" className="hero dark" ref={ref}>
-      <DotGrid />
-      <motion.div className="hero-inner" style={{ y, opacity: fade }}>
-        <motion.p className="mono-label" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.1 }}>
-          <i className="led" /> Open to work · Dubai, UAE
+    <motion.div className={`floater ${cls}`} style={{ ...style, y }}>
+      <motion.div style={{ x: px, y: py }}>{children}</motion.div>
+    </motion.div>
+  );
+}
+
+const Cube = () => (
+  <div className="cube">{["f", "b", "r", "l", "t", "bt"].map((f) => <i key={f} className={f} />)}</div>
+);
+
+function Hero() {
+  const ref = useRef(null);
+  const compact = useCompact();
+  const reduce = useReduced();
+  const { scrollYProgress: sp } = useScroll({ target: ref, offset: ["start start", "end start"] });
+  const gridY = useTransform(sp, [0, 1], reduce ? [0, 0] : [0, 90]);
+  const blobY = useTransform(sp, [0, 1], reduce ? [0, 0] : [0, 180]);
+  const blobX = useTransform(mx, [-1, 1], reduce ? [0, 0] : [50, -50]);
+  const typeY = useTransform(sp, [0, 1], reduce ? [0, 0] : [0, -140]);
+  const typeX = useTransform(mx, [-1, 1], reduce ? [0, 0] : [-30, 30]);
+  const contentY = useTransform(sp, [0, 1], reduce ? [0, 0] : [0, -70]);
+  const contentO = useTransform(sp, [0, 0.7], reduce ? [1, 1] : [1, 0]);
+  const [ready, setReady] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setReady(true), 80); return () => clearTimeout(t); }, []);
+  return (
+    <section id="home" ref={ref} className="hero">
+      {/* layer 1: far grid */}
+      <motion.div className="layer l-grid" style={{ y: gridY }} />
+      {/* layer 2: colour blobs */}
+      <motion.div className="layer l-blobs" style={{ y: blobY, x: blobX }}><i className="b1" /><i className="b2" /><i className="b3" /></motion.div>
+      {/* layer 3: giant outlined type */}
+      <motion.div className="layer l-type" style={{ y: typeY, x: typeX }} aria-hidden="true">
+        <span>MERN</span>
+      </motion.div>
+      {/* layer 4: floating objects at different depths */}
+      <div className="layer l-float" aria-hidden="true">
+        <Floater scroll={sp} d={0.5} cls="f1" style={{ left: "8%", top: "22%" }}><div className="chip">{"</>"}</div></Floater>
+        <Floater scroll={sp} d={1.4} cls="f2" style={{ left: "46%", top: "14%" }}><Cube /></Floater>
+        <Floater scroll={sp} d={0.8} cls="f3" style={{ left: "58%", top: "70%" }}><div className="ring" /></Floater>
+        <Floater scroll={sp} d={1.1} cls="f4" style={{ left: "5%", top: "68%" }}><div className="chip alt">JWT</div></Floater>
+        <Floater scroll={sp} d={0.35} cls="f5" style={{ left: "36%", top: "82%" }}><div className="dotp" /></Floater>
+        {!compact && <>
+          <Floater scroll={sp} d={1.7} cls="f6" style={{ left: "88%", top: "12%" }}><div className="chip">{"{ }"}</div></Floater>
+          <Floater scroll={sp} d={0.9} cls="f7" style={{ left: "78%", top: "78%" }}><Cube /></Floater>
+          <Floater scroll={sp} d={0.6} cls="f8" style={{ left: "26%", top: "10%" }}><div className="chip alt">API</div></Floater>
+          <Floater scroll={sp} d={1.25} cls="f9" style={{ left: "92%", top: "52%" }}><div className="ring sm" /></Floater>
+          <Floater scroll={sp} d={0.45} cls="f10" style={{ left: "16%", top: "46%" }}><div className="dotp b" /></Floater>
+        </>}
+      </div>
+
+      <motion.div className="hero-in wrap" style={{ y: contentY, opacity: contentO }}>
+        <motion.p className="pill" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.8, ease: EASE }}>
+          <i className="led" /> Open to React JS &amp; MERN roles · Dubai, UAE
         </motion.p>
-        <DotText lines={["ABIYOUTH", "SHALVIN"]} morph={[["ABIYOUTH", "SHALVIN"], ["MERN", "DEVELOPER"], ["FULL", "STACK"]]} maxFs={165} label="Abiyouth Shalvin, MERN Stack Developer" />
-        <StackFlow />
-        <motion.div className="hero-bottom" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.5, duration: 0.8, ease: EASE }}>
-          <div>
-            <p className="typing">{`> ${role}`}<b className="caret">_</b></p>
-            <p className="lead">1 year as a React JS Developer. I build responsive full-stack apps with MongoDB, Express, React and Node.js.</p>
-          </div>
-          <div className="row">
-            <Magnetic><a className="btn solid" href="#projects">View projects</a></Magnetic>
-            <Magnetic><a className="btn" href={RESUME} download="Abiyouth_Shalvin_Resume.pdf">Download resume ↓</a></Magnetic>
-          </div>
+        <h1 className="hero-h" aria-label="Hi, I'm Abiyouth Shalvin">
+          <HeadLines as="span" now lines={["Hi, I'm"]} delay={0.5} className="h-sm" />
+          <HeadLines as="span" now lines={["Abiyouth", "Shalvin"]} delay={0.65} className="h-big grad" />
+        </h1>
+        <motion.p className="hero-sub" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.1, duration: 0.8, ease: EASE }}>
+          Software Developer <span>|</span> MERN Stack Developer
+        </motion.p>
+        <Lines className="hero-p" delay={1.2} play={ready}
+          text="I build complete, working web products with MongoDB, Express.js, React.js and Node.js. Responsive interfaces, clean REST APIs and secure JWT authentication, shipped from the first sketch to a live deploy." />
+        <motion.div className="cta" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.7, duration: 0.8, ease: EASE }}>
+          <Magnetic><a className="btn primary" href="#projects">View My Projects <span aria-hidden="true">→</span></a></Magnetic>
+          <Magnetic><a className="btn glass" href={RESUME} download="Abiyouth_Shalvin_Resume.pdf">Download Resume <span aria-hidden="true">↓</span></a></Magnetic>
+          <Magnetic><a className="btn ghost" href="#contact">Contact Me</a></Magnetic>
         </motion.div>
       </motion.div>
-      <div className="scroll-hint" aria-hidden="true"><i /><span>Scroll</span></div>
+
+      <a className="scroll-cue" href="#about" aria-label="Scroll down to About">
+        <span className="mouse"><i /></span><small>Scroll</small>
+      </a>
     </section>
   );
 }
 
-function About() {
+/* ================= SIDEWAYS TEXT ================= */
+function Sideways() {
+  const ref = useRef(null);
+  const reduce = useReduced();
+  const { scrollYProgress: p } = useScroll({ target: ref, offset: ["start end", "end start"] });
+  const a = useTransform(p, [0, 1], reduce ? [0, 0] : ["8%", "-38%"]);
+  const b = useTransform(p, [0, 1], reduce ? [0, 0] : ["-45%", "5%"]);
+  const c = useTransform(p, [0, 1], reduce ? [0, 0] : ["6%", "-30%"]);
+  const row = (t, x, cls) => (
+    <motion.div className={`sw-row ${cls}`} style={{ x }}>
+      {[0, 1, 2].map((k) => <span key={k}>{t}<i /></span>)}
+    </motion.div>
+  );
   return (
-    <Morph id="about" className="sec light">
-      <div className="wrap">
-        <p className="eyebrow">( 01 ) About</p>
-        <DotText lines={["ABOUT"]} morph={[["ABOUT"], ["ME"]]} every={4200} color="#0a0a0a" maxFs={150} />
-        <div className="bento">
-          <motion.div className="card c-intro" {...reveal(0)}>
-            <ScrollText text="MERN Stack Developer who turns ideas into complete, working products. I build responsive full-stack apps with MongoDB, Express.js, React.js and Node.js, plus MySQL, with clean REST APIs and secure authentication." />
-          </motion.div>
-          <motion.div className="card c-photo grow" {...reveal(1)} whileHover={{ y: -6 }}>
-            <img src={PHOTO} alt="Portrait of Abiyouth Shalvin" />
-          </motion.div>
-          <motion.div className="card c-stats" {...reveal(2)}>
-            <div><b><CountUp to={1} suffix="+" /></b><span>Year experience</span></div>
-            <div><b><CountUp to={25} suffix="+" /></b><span>React components</span></div>
-            <div><b><CountUp to={PROJECTS.length} /></b><span>Projects</span></div>
-          </motion.div>
-          <motion.div className="card c-clock invert" {...reveal(3)}>
-            <span className="mono-label">DXB · Dubai, UAE</span>
-            <b><DubaiClock /></b>
-          </motion.div>
-          <motion.div className="card c-term invert" {...reveal(0)}><Terminal /></motion.div>
-          <motion.div className="card c-badge invert" {...reveal(1)}>
-            <Badge />
-            <p className="mono-label">1 year · React JS · MERN</p>
-          </motion.div>
-          <motion.div className="card c-open invert" {...reveal(0)}>
-            <p><i className="led" /> Open to React JS and MERN developer roles</p>
-            <Magnetic><a className="btn solid-light" href="#contact">Say hello →</a></Magnetic>
-          </motion.div>
-        </div>
-      </div>
-    </Morph>
+    <section className="sideways" ref={ref} aria-label="Full stack developer, building digital experiences, creative developer">
+      {row("FULL STACK DEVELOPER", a, "")}
+      {row("BUILDING DIGITAL EXPERIENCES", b, "out")}
+      {row("CREATIVE DEVELOPER", c, "")}
+    </section>
   );
 }
 
-function Education() {
-  const EDU = [
-    ["B.E. Computer Science Engineering", "Jeppiaar Engineering College, Chennai", "2022 – 2025"],
-    ["Diploma in Computer Science", "Morning Star Polytechnic College, Nagercoil", "2019 – 2022"],
-    ["MERN Stack Course", "Naresh IT, Hyderabad", "Apr – Aug 2025"],
-  ];
+/* ================= ABOUT: pinned heading + line reveal ================= */
+const ABOUT_STAGES = [
+  { n: "01", t: "Who I am", s: "MERN developer · Dubai" },
+  { n: "02", t: "My path", s: "Experience · education · numbers" },
+  { n: "03", t: "How I build", s: "The stack behind every project" },
+];
+
+function About() {
+  const ref = useRef(null);
+  const reduce = useReduced();
+  const { scrollYProgress: sp } = useScroll({ target: ref, offset: ["start start", "end end"] });
+  const [stage, setStage] = useState(0);
+  useMotionValueEvent(sp, "change", (v) => setStage(Math.min(2, Math.floor(v * 3))));
+  const bgX = useTransform(sp, [0, 1], reduce ? [0, 0] : [260, -1100]);
+  const fill = useTransform(sp, [0, 1], [0, 1]);
+  const S = ABOUT_STAGES[stage];
   return (
-    <Morph id="education" className="sec light tight">
-      <div className="wrap">
-        <p className="eyebrow">( 02 ) Education</p>
-        <DotText lines={["EDUCATION"]} morph={[["EDUCATION"], ["B.E. CSE"]]} every={4200} color="#0a0a0a" maxFs={130} />
-        <div className="edu-grid">
-          {EDU.map(([t, sch, y], i) => (
-            <motion.div key={t} className="card c-edu grow" {...reveal(i)} whileHover={{ y: -6 }}>
-              <span className="mono-label">{y}</span>
-              <div><h3>{t}</h3><p>{sch}</p></div>
+    <section id="about" ref={ref} className="about">
+      <motion.div className="bg-word" style={{ x: bgX }} aria-hidden="true">DEVELOPER · DEVELOPER</motion.div>
+      <div className="wrap pin-grid">
+        <div className="pin-left">
+          <div className="pin-in">
+            <Eyebrow n="01">About</Eyebrow>
+            <AnimatePresence mode="wait">
+              <motion.div key={stage} initial={{ opacity: 0, y: 46, filter: "blur(10px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -34, filter: "blur(8px)" }} transition={{ duration: 0.55, ease: EASE }}>
+                <h2 className="pin-h"><span className="grad">{S.t}</span></h2>
+                <p className="pin-s">{S.s}</p>
+              </motion.div>
+            </AnimatePresence>
+            <div className="pin-track" aria-hidden="true">
+              <motion.i style={{ scaleY: fill }} />
+              {ABOUT_STAGES.map((a, i) => <b key={a.n} className={i <= stage ? "on" : ""} style={{ top: `${i * 50}%` }}>{a.n}</b>)}
+            </div>
+          </div>
+        </div>
+
+        <div className="pin-right">
+          <div className="pin-block b1">
+            <Lines as="p" className="lead" text="MERN Stack Developer who turns ideas into complete, working products." />
+            <Lines className="body" delay={0.1} text="I build responsive full-stack apps with MongoDB, Express.js, React.js and Node.js, plus MySQL, with clean REST APIs and secure authentication. I care about the details users feel: fast pages, clear states and layouts that hold up on every screen." />
+            <Lines className="body" delay={0.15} text="I completed a Diploma and a B.E. in Computer Science, then a MERN stack course at Naresh IT in Hyderabad. Since September 2025 I have been building React interfaces at Adot Publishing Service in Chennai, and I am now based in Dubai." />
+            <motion.div {...reveal(1)}>
+              <Tilt className="photo-card" max={7} zoom={1.03}>
+                <img src={PHOTO} alt="Portrait of Abiyouth Shalvin" loading="lazy" />
+              </Tilt>
             </motion.div>
-          ))}
+          </div>
+
+          <div className="pin-block b2">
+            <div className="stats">
+              {[[1, "+", "Year of experience"], [10, "+", "Responsive pages built"], [25, "+", "React components"], [PROJECTS.length, "", "Projects shipped"]].map(([n, s, l], i) => (
+                <motion.div key={l} className="glass stat" {...reveal(i)}>
+                  <b><CountUp to={n} suffix={s} /></b><span>{l}</span>
+                </motion.div>
+              ))}
+            </div>
+            <ol className="path">
+              {[["2019 – 2022", "Diploma in Computer Science", "Morning Star Polytechnic College, Nagercoil"],
+                ["2022 – 2025", "B.E. Computer Science Engineering", "Jeppiaar Engineering College, Chennai"],
+                ["Apr – Aug 2025", "MERN Stack Course", "Naresh IT, Hyderabad"],
+                ["Sep 2025 – now", "React JS Developer", "Adot Publishing Service, Chennai"]].map(([y, t, s], i) => (
+                <motion.li key={t} className="glass" {...reveal(i)}>
+                  <span>{y}</span><div><b>{t}</b><small>{s}</small></div>
+                </motion.li>
+              ))}
+            </ol>
+          </div>
+
+          <div className="pin-block b3">
+            <div className="mern">
+              {MERN.map((m, i) => (
+                <motion.div key={m.k} {...reveal(i)}>
+                  <Tilt className="glass mern-card" max={11}>
+                    <b>{m.k}</b><h3>{m.name}</h3><p>{m.text}</p>
+                  </Tilt>
+                </motion.div>
+              ))}
+            </div>
+            <motion.div className="open glass" {...reveal(1)}>
+              <p><i className="led" /> Open to React JS and MERN developer roles</p>
+              <Magnetic><a className="btn primary" href="#contact">Say hello <span aria-hidden="true">→</span></a></Magnetic>
+            </motion.div>
+          </div>
         </div>
       </div>
-    </Morph>
+    </section>
+  );
+}
+
+/* ================= SKILLS: card arc carousel ================= */
+function SkillCard({ g, active }) {
+  const max = 7, r = 26, C = 2 * Math.PI * r;
+  return (
+    <div className={`glass skill-card hue-${g.hue} ${active ? "is-active" : ""}`}>
+      <div className="sk-top">
+        <span className="sk-glyph">{g.glyph}</span>
+        <svg className="sk-ring" viewBox="0 0 64 64" aria-hidden="true">
+          <circle cx="32" cy="32" r={r} className="trk" />
+          <circle cx="32" cy="32" r={r} className="val" style={{ strokeDasharray: C, strokeDashoffset: active ? C * (1 - g.items.length / max) : C }} />
+          <text x="32" y="37" textAnchor="middle">{g.items.length}</text>
+        </svg>
+      </div>
+      <h3>{g.title}</h3>
+      <ul>
+        {g.items.map((it, i) => <li key={it} style={{ "--d": `${i * 0.12}s` }}>{it}</li>)}
+      </ul>
+    </div>
+  );
+}
+
+function ArcCarousel({ items }) {
+  const [idx, setIdx] = useState(1);
+  const n = items.length;
+  const go = (d) => setIdx((i) => clamp(i + d, 0, n - 1));
+  const { dx, dragging, bind } = useDrag(go, 50);
+  const compact = useCompact();
+  const R = compact ? 380 : 560, TH = compact ? 30 : 25;
+  const gap = compact ? 190 : 250;
+  const onKey = (e) => { if (e.key === "ArrowRight") { e.preventDefault(); go(1); } if (e.key === "ArrowLeft") { e.preventDefault(); go(-1); } };
+  return (
+    <div className="arc" role="group" aria-roledescription="carousel" aria-label="Skill groups">
+      <div className={`arc-view ${dragging ? "drag" : ""}`} tabIndex={0} onKeyDown={onKey} {...bind}>
+        <div className="arc-stage">
+          {items.map((g, i) => {
+            const o = i - idx - dx / gap, a = Math.abs(o);
+            const rad = (o * TH * Math.PI) / 180;
+            const x = R * Math.sin(rad), z = R * (Math.cos(rad) - 1);
+            const s = 1.06 - Math.min(a, 1) * 0.2;
+            return (
+              <div key={g.title} className="arc-card" aria-hidden={Math.round(a) !== 0}
+                style={{ transform: `translate3d(${x}px, ${a * a * 8}px, ${z}px) rotateY(${-o * TH}deg) scale(${s})`, opacity: clamp(1 - a * 0.3, 0, 1), zIndex: 100 - Math.round(a * 10), pointerEvents: a > 2.2 ? "none" : "auto" }}
+                onClick={() => setIdx(i)}>
+                <SkillCard g={g} active={Math.round(a) === 0} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="car-ctl">
+        <button className="arrow" aria-label="Previous skill group" onClick={() => go(-1)} disabled={idx === 0}>←</button>
+        <div className="dots">{items.map((g, i) => <button key={g.title} className={i === idx ? "on" : ""} aria-label={`Show ${g.title}`} onClick={() => setIdx(i)} />)}</div>
+        <button className="arrow" aria-label="Next skill group" onClick={() => go(1)} disabled={idx === n - 1}>→</button>
+      </div>
+    </div>
+  );
+}
+
+function Skills() {
+  return (
+    <section id="skills" className="sec skills">
+      <div className="wrap">
+        <Eyebrow n="02">Technical skills</Eyebrow>
+        <HeadLines className="sec-h" lines={["Tools I reach for", "every single day."]} />
+        <Lines className="sec-p" text="Drag, swipe or use the arrows. Each card is one part of the stack, from the screen a user touches to the database behind it." />
+      </div>
+      <ArcCarousel items={SKILL_GROUPS} />
+    </section>
+  );
+}
+
+/* ================= EXPERIENCE: stacking cards ================= */
+function StackCard({ i, n, p, children }) {
+  const reduce = useReduced();
+  const last = i === n - 1;
+  const scale = useTransform(p, [i / n, 1], reduce || last ? [1, 1] : [1, 1 - (n - 1 - i) * 0.05 - 0.03]);
+  const dim = useTransform(p, [(i + 0.35) / n, 1], reduce || last ? [0, 0] : [0, 0.6]);
+  return (
+    <motion.div className="stack-item" style={{ "--i": i, scale }}>
+      <div className="glass stack-card">{children}</div>
+      <motion.span className="stack-dim" style={{ opacity: dim }} aria-hidden="true" />
+    </motion.div>
   );
 }
 
 function Experience() {
   const ref = useRef(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start 0.75", "end 0.6"] });
-  const scaleY = useSpring(scrollYProgress, { stiffness: 100, damping: 25 });
-  return (
-    <Morph id="experience" className="sec dark">
-      <div className="wrap">
-        <p className="eyebrow">( 03 ) Experience</p>
-        <DotText lines={["EXPERIENCE"]} morph={[["EXPERIENCE"], ["1 YEAR"]]} every={4200} maxFs={130} />
-        {EXPERIENCE.map((e) => (
-          <div className="exp" ref={ref} key={e.company}>
-            <div className="exp-line"><motion.span style={{ scaleY }} /></div>
-            <div>
-              <motion.div className="exp-head" {...reveal(0)}>
-                <h3>{e.role}</h3>
-                <p>{e.company} · {e.place}</p>
-                <span className="mono-label">{e.period}</span>
-              </motion.div>
-              <ul>
-                {e.points.map((p, i) => (
-                  <motion.li key={p} initial={{ opacity: 0, x: 50 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.9 }} transition={{ duration: 0.55, ease: EASE, delay: i * 0.03 }}>
-                    <em>{String(i + 1).padStart(2, "0")}</em><span>{p}</span>
-                  </motion.li>
-                ))}
-              </ul>
-              <p className="stack">{e.stack.join("  /  ")}</p>
-            </div>
-          </div>
+  const { scrollYProgress: p } = useScroll({ target: ref, offset: ["start start", "end end"] });
+  const job = EXPERIENCE[0];
+  const cards = [
+    <>
+      <div className="sc-head"><span className="sc-n">01</span><span className="sc-tag">Work experience</span></div>
+      <h3>{job.role}</h3>
+      <p className="sc-sub">{job.company} · {job.place}</p>
+      <p className="sc-when">{job.period}</p>
+      <div className="badges">{job.stack.map((s) => <span key={s}>{s}</span>)}</div>
+    </>,
+    <>
+      <div className="sc-head"><span className="sc-n">02</span><span className="sc-tag">What I delivered</span></div>
+      <ul className="sc-list">{job.points.map((t) => <li key={t}>{t}</li>)}</ul>
+    </>,
+    <>
+      <div className="sc-head"><span className="sc-n">03</span><span className="sc-tag">Education</span></div>
+      <ul className="edu">
+        {[["B.E. Computer Science Engineering", "Jeppiaar Engineering College, Chennai", "2022 – 2025"],
+          ["Diploma in Computer Science", "Morning Star Polytechnic College, Nagercoil", "2019 – 2022"],
+          ["MERN Stack Course", "Naresh IT, Hyderabad", "Apr – Aug 2025"]].map(([t, s, y]) => (
+          <li key={t}><span>{y}</span><div><b>{t}</b><small>{s}</small></div></li>
         ))}
-      </div>
-    </Morph>
-  );
-}
-
-// Pinned phone: scroll and the screen swaps to the next project
-function Projects() {
-  const ref = useRef(null);
-  const rig = useRef(null);
-  const [idx, setIdx] = useState(0);
-  const n = PROJECTS.length;
-  const p = PROJECTS[idx];
-  const [full, setFull] = useState(false);
-
-  // the monitor stays frozen; scrolling pans the projects across its screen, one after another
-  useEffect(() => {
-    let raf = 0;
-    const update = () => {
-      raf = 0;
-      const el = ref.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      const span = el.offsetHeight - window.innerHeight;
-      const pr = Math.min(1, Math.max(0, span > 0 ? -r.top / span : 0));
-      const t = pr * (n - 1);
-      const k = Math.min(n - 2, Math.floor(t));
-      const l = t - k;
-      const s = Math.min(1, Math.max(0, (l - 0.25) / 0.5));
-      const e = s * s * (3 - 2 * s);          // dwell on each project, then glide to the next
-      const pos = n > 1 ? k + e : 0;
-      rig.current?.style.setProperty("--pos", pos.toFixed(3));
-      const near = Math.round(pos);
-      setIdx((cur) => (cur === near ? cur : near));
-    };
-    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
-    update();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); if (raf) cancelAnimationFrame(raf); };
-  }, [n]);
-
-  useEffect(() => {
-    document.body.style.overflow = full ? "hidden" : "";
-    const esc = (e) => e.key === "Escape" && setFull(false);
-    window.addEventListener("keydown", esc);
-    return () => window.removeEventListener("keydown", esc);
-  }, [full]);
-
-  const jump = (i) => {
-    const el = ref.current;
-    const top = el.getBoundingClientRect().top + window.scrollY;
-    window.scrollTo({ top: top + (el.offsetHeight - window.innerHeight) * ((i + 0.5) / n), behavior: "smooth" });
-  };
-  const host = p.live ? new URL(p.live).host : "private project";
-
+      </ul>
+    </>,
+  ];
   return (
-    <section id="projects" className="proj dark" ref={ref} style={{ height: `${n * 90 + 20}vh` }}>
-      <div className="proj-sticky">
-        <div className="proj-left">
-          <p className="eyebrow">( 04 ) Selected work</p>
-          <div className="proj-count"><b>{String(idx + 1).padStart(2, "0")}</b><span>/ {String(n).padStart(2, "0")}</span></div>
-          <AnimatePresence mode="wait">
-            <motion.h3 key={idx} initial={{ opacity: 0, x: 60, filter: "blur(8px)" }} animate={{ opacity: 1, x: 0, filter: "blur(0px)" }} exit={{ opacity: 0, x: -60, filter: "blur(8px)" }} transition={{ duration: 0.35, ease: EASE }}>{p.title}</motion.h3>
-          </AnimatePresence>
-        </div>
-
-        <div className="proj-stage">
-          <div className="mon3d" ref={rig} style={{ "--n": n }}>
-            <div className="monitor" role="button" tabIndex={0} aria-label={`Expand ${p.title}`} onClick={() => setFull(true)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setFull(true)}>
-              <div className="mon-screen">
-                <div className="mon-bar"><i className="r" /><i /><i /><span>{host}</span></div>
-                <div className="mon-view">
-                  <div className="mon-strip" style={{ width: `${n * 100}%` }}>
-                    {PROJECTS.map((q, k) => (
-                      <div className="mon-body slide" key={q.title} aria-hidden={k !== idx}>
-                        <Wire i={k} />
-                        <div className="mon-text">
-                          <b>{String(k + 1).padStart(2, "0")}</b>
-                          <h4>{q.title}</h4>
-                          <div className="chips">{q.stack.slice(0, 5).map((t) => <span key={t}>{t}</span>)}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="screen-bar" />
-              </div>
-            </div>
-            <i className="m-neck" aria-hidden="true" />
-            <i className="m-foot" aria-hidden="true" />
-          </div>
-          <p className="expand-hint">Scroll to browse · click the screen to expand</p>
-        </div>
-
-        <div className="proj-right">
-          <AnimatePresence mode="wait">
-            <motion.div key={idx} initial={{ opacity: 0, x: 60, filter: "blur(8px)" }} animate={{ opacity: 1, x: 0, filter: "blur(0px)" }} exit={{ opacity: 0, x: -60, filter: "blur(8px)" }} transition={{ duration: 0.35, ease: EASE }}>
-              <p className="proj-text">{p.text}</p>
-              <p className="stack">{p.stack.join("  /  ")}</p>
-              <div className="row">
-                {p.live && <a className="btn solid" href={p.live} target="_blank" rel="noreferrer">Open live demo ↗</a>}
-                {p.code && <a className="btn" href={p.code} target="_blank" rel="noreferrer">View code ↗</a>}
-              </div>
-            </motion.div>
-          </AnimatePresence>
-        </div>
-
-        <div className="proj-dots" role="tablist" aria-label="Projects">
-          {PROJECTS.map((q, i) => (
-            <button key={q.title} role="tab" aria-selected={i === idx} aria-label={q.title} className={i === idx ? "on" : ""} onClick={() => jump(i)} />
-          ))}
-        </div>
+    <section id="experience" className="sec experience">
+      <div className="wrap">
+        <Eyebrow n="03">Experience &amp; education</Eyebrow>
+        <HeadLines className="sec-h" lines={["Where I have", "built and learned."]} />
       </div>
-      <AnimatePresence>
-        {full && (
-          <motion.div className="mon-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setFull(false)}>
-            <motion.div className="mon-full" initial={{ opacity: 0, scale: 0.88, rotateX: 18 }} animate={{ opacity: 1, scale: 1, rotateX: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.45, ease: EASE }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={p.title}>
-              <div className="mon-bar">
-                <i className="r" /><i /><i />
-                <span>{host}</span>
-                <button className="mon-close" onClick={() => setFull(false)}>Close ✕</button>
-              </div>
-              <motion.div className="mon-full-body" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.5, ease: EASE }}>
-                <Wire i={idx} />
-                <b>{String(idx + 1).padStart(2, "0")}</b>
-                <h3>{p.title}</h3>
-                <p>{p.text}</p>
-                <p className="stack">{p.stack.join("  /  ")}</p>
-                <div className="row">
-                  {p.live && <a className="btn solid" href={p.live} target="_blank" rel="noreferrer">Open live demo ↗</a>}
-                  {p.code && <a className="btn" href={p.code} target="_blank" rel="noreferrer">View code ↗</a>}
-                </div>
-              </motion.div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div className="wrap stack" ref={ref}>
+        {cards.map((c, i) => <StackCard key={i} i={i} n={cards.length} p={p}>{c}</StackCard>)}
+      </div>
     </section>
   );
 }
 
-function Skills() {
-  const all = Object.values(SKILLS).flat();
+/* ================= PROJECTS: focus-frame slider + 3D zoom cards ================= */
+function Mock({ kind }) {
+  if (kind === "cinema") return (
+    <div className="mock cinema">
+      <div className="mk-bar"><i /><i /><i /></div>
+      <div className="mk-screen" />
+      <div className="seats">{Array.from({ length: 40 }, (_, i) => <i key={i} className={[11, 12, 13, 22, 23].includes(i) ? "sel" : [4, 5, 17, 18, 30, 31, 32].includes(i) ? "taken" : ""} />)}</div>
+    </div>
+  );
+  if (kind === "shop") return (
+    <div className="mock shop">
+      <div className="mk-bar"><i /><i /><i /></div>
+      <div className="mk-search" />
+      <div className="tiles">{Array.from({ length: 6 }, (_, i) => <div key={i}><span /><b /><em /></div>)}</div>
+    </div>
+  );
+  if (kind === "queue") return (
+    <div className="mock queue">
+      <div className="mk-bar"><i /><i /><i /></div>
+      <div className="now"><small>NOW SERVING</small><b>A-024</b></div>
+      <div className="next"><span>A-025</span><span>A-026</span><span>A-027</span></div>
+    </div>
+  );
   return (
-    <Morph id="skills" className="sec light">
-      <div className="wrap">
-        <p className="eyebrow">( 05 ) Skills</p>
-        <DotText lines={["SKILLS"]} morph={[["SKILLS"], ["MERN"]]} every={4200} color="#0a0a0a" maxFs={150} />
-        <div className="mern-grid">
-          {MERN.map((m, i) => (
-            <motion.div key={m.k} className="mern-card grow" tabIndex={0} {...reveal(i)}>
-              <div className="flip">
-                <div className="face front"><b>{m.k}</b><h3>{m.name}</h3></div>
-                <div className="face back"><i className="led" /><h3>{m.name}</h3><p>{m.text}</p></div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-        <div className="specs">
-          {Object.entries(SKILLS).map(([g, items], i) => (
-            <motion.div key={g} className="spec-row" initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.8 }}>
-              <motion.span className="spec-line" variants={{ hidden: { scaleX: 0 }, show: { scaleX: 1 } }} transition={{ duration: 0.8, ease: EASE, delay: i * 0.05 }} />
-              <strong>{g}</strong>
-              <span>{items.join("  /  ")}</span>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-      <div className="dark-band"><Marquee items={all} /><Marquee items={[...all].reverse()} reverse /></div>
-    </Morph>
+    <div className="mock site">
+      <div className="mk-bar"><i /><i /><i /></div>
+      <div className="mk-hero"><b /><b /><em /></div>
+      <div className="mk-cards"><i /><i /><i /></div>
+    </div>
   );
 }
 
+function ProjectCard({ p, active }) {
+  const shot = SHOTS[p.title] || { kind: "site", img: "" };
+  return (
+    <Tilt className="p3d" active={active} max={8} zoom={1.045}>
+      <div className="glass p-card">
+        <div className="p-shot">
+          {shot.img ? <img src={shot.img} alt={`${p.title} preview`} loading="lazy" /> : <Mock kind={shot.kind} />}
+          <span className="p-tag">{shot.img ? "Screenshot" : "Preview"}</span>
+        </div>
+        <h3>{p.title}</h3>
+        <Lines className="p-text" text={p.text} play={active} stagger={0.07} />
+        <div className="badges">{p.stack.map((s) => <span key={s}>{s}</span>)}</div>
+        <div className="p-links">
+          {p.live && <a className="btn primary sm" href={p.live} target="_blank" rel="noreferrer" tabIndex={active ? 0 : -1}>Live demo ↗</a>}
+          {p.code && <a className="btn glass sm" href={p.code} target="_blank" rel="noreferrer" tabIndex={active ? 0 : -1}>GitHub ↗</a>}
+        </div>
+      </div>
+      <span className="p-floor" aria-hidden="true" />
+    </Tilt>
+  );
+}
+
+function Projects() {
+  const [idx, setIdx] = useState(0);
+  const n = PROJECTS.length;
+  const go = (d) => setIdx((i) => clamp(i + d, 0, n - 1));
+  const { dx, dragging, bind } = useDrag(go, 60);
+  const ref = useRef(null);
+  const reduce = useReduced();
+  const { scrollYProgress: sp } = useScroll({ target: ref, offset: ["start end", "end start"] });
+  const bgX = useTransform(sp, [0, 1], reduce ? [0, 0] : [300, -1000]);
+  const onKey = (e) => { if (e.key === "ArrowRight") { e.preventDefault(); go(1); } if (e.key === "ArrowLeft") { e.preventDefault(); go(-1); } };
+  return (
+    <section id="projects" ref={ref} className="sec projects">
+      <motion.div className="bg-word" style={{ x: bgX }} aria-hidden="true">PROJECTS · PROJECTS</motion.div>
+      <div className="wrap">
+        <Eyebrow n="04">Featured projects</Eyebrow>
+        <HeadLines className="sec-h" lines={["Things I have", "shipped."]} />
+      </div>
+      <div className="fs" style={{ "--i": idx, "--d": dx }} role="group" aria-roledescription="carousel" aria-label="Featured projects">
+        <div className="fs-frame" aria-hidden="true"><i /><i /><i /><i /><span>{String(idx + 1).padStart(2, "0")} / {String(n).padStart(2, "0")}</span></div>
+        <div className="fs-view" tabIndex={0} onKeyDown={onKey} {...bind}>
+          <div className={`fs-track ${dragging ? "drag" : ""}`}>
+            {PROJECTS.map((p, i) => (
+              <div key={p.title} className={`fs-item ${i === idx ? "on" : ""}`} onClick={() => i !== idx && setIdx(i)}
+                aria-label={`${i + 1} of ${n}`}
+                ref={(el) => { if (el) { if (i === idx) el.removeAttribute("inert"); else el.setAttribute("inert", ""); } }}>
+                <ProjectCard p={p} active={i === idx} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="car-ctl">
+        <button className="arrow" aria-label="Previous project" onClick={() => go(-1)} disabled={idx === 0}>←</button>
+        <div className="dots">{PROJECTS.map((p, i) => <button key={p.title} className={i === idx ? "on" : ""} aria-label={`Show ${p.title}`} onClick={() => setIdx(i)} />)}</div>
+        <button className="arrow" aria-label="Next project" onClick={() => go(1)} disabled={idx === n - 1}>→</button>
+      </div>
+    </section>
+  );
+}
+
+/* ================= DEVELOPMENT PROCESS: scroll-triggered demo ================= */
+const STEPS = [
+  { k: "01", t: "UI/UX Design", d: "Wireframes, spacing and a colour system before any code." },
+  { k: "02", t: "Frontend Development", d: "Reusable React components with state and responsive layouts." },
+  { k: "03", t: "API Integration", d: "Fetch calls with loading, error and success states." },
+  { k: "04", t: "Backend Development", d: "Express routes, middleware and JWT-protected endpoints." },
+  { k: "05", t: "Database Connection", d: "MongoDB collections, queries and validated documents." },
+  { k: "06", t: "Testing and Deployment", d: "Check, build and ship: Vercel for the UI, Render for the API." },
+];
+const LOGS = [
+  ["$ sketch layout", "✓ tokens: colour, type, spacing"],
+  ["$ npm run dev", "VITE ready · localhost:5173"],
+  ["GET /api/movies", "→ 200 OK · JSON"],
+  ["verifyJWT ✓", "role: user · next()"],
+  ["MongoDB connected", "✓ collection: movies"],
+  ["$ vite build", "✓ live on Vercel + Render"],
+];
+const CODE_FE = `function MovieCard({ movie }) {
+  const [booked, setBooked] = useState(false);
+
+  return (
+    <article className="card">
+      <h3>{movie.title}</h3>
+      <button onClick={() => setBooked(true)}>
+        {booked ? "Booked ✓" : "Book seats"}
+      </button>
+    </article>
+  );
+}`;
+const CODE_API = `const res = await fetch("/api/movies", {
+  headers: { Authorization: \`Bearer \${token}\` },
+});
+if (!res.ok) throw new Error("Request failed");
+const movies = await res.json();`;
+const CODE_BE = `router.get("/movies", verifyJWT, async (req, res) => {
+  const movies = await db
+    .collection("movies")
+    .find()
+    .toArray();
+  res.json(movies);
+});`;
+const CODE_DB = `const client = new MongoClient(process.env.MONGO_URI);
+await client.connect();
+const db = client.db("cinema");
+// collections: users, movies, bookings`;
+
+const KW = new Set(["const", "let", "await", "async", "return", "function", "import", "from", "new", "if", "throw"]);
+function Code({ text }) {
+  const parts = text.split(/(\/\/.*$|`[^`]*`|"[^"]*"|\b\d+\b|<\/?[A-Za-z][\w.]*|\b[A-Za-z_]+\b)/m).filter((x) => x !== "");
+  return (
+    <pre className="code"><code>
+      {parts.map((s, i) => {
+        let c = "";
+        if (s.startsWith("//")) c = "cm";
+        else if (/^["`]/.test(s)) c = "st";
+        else if (KW.has(s)) c = "kw";
+        else if (/^<\/?[A-Za-z]/.test(s)) c = "tg";
+        else if (/^\d+$/.test(s)) c = "nm";
+        else if (/^[A-Z]/.test(s)) c = "cl";
+        return c ? <span key={i} className={c}>{s}</span> : s;
+      })}
+      <span className="caret" />
+    </code></pre>
+  );
+}
+const typed = (t, p) => t.slice(0, Math.floor(t.length * clamp(p)));
+
+function StageDesign({ p }) {
+  const fill = ramp(p, 0.45, 0.8);
+  return (
+    <div className="st st-design">
+      <div className={`wf ${fill > 0.02 ? "filled" : ""}`} style={{ "--f": fill }}>
+        <div className="wf-nav" style={{ opacity: ramp(p, 0, 0.12) }}><i /><span /><span /><span /></div>
+        <div className="wf-hero" style={{ opacity: ramp(p, 0.1, 0.25) }}><b /><b /><em /></div>
+        <div className="wf-cards">{[0, 1, 2].map((i) => <div key={i} style={{ opacity: ramp(p, 0.22 + i * 0.07, 0.38 + i * 0.07) }} />)}</div>
+      </div>
+      <div className="tokens" style={{ opacity: ramp(p, 0.5, 0.75) }}>
+        <span style={{ background: "#4f7cff" }} /><span style={{ background: "#8b5cf6" }} /><span style={{ background: "#22d3ee" }} />
+        <b>Aa</b><small>Type · spacing · colour</small>
+      </div>
+    </div>
+  );
+}
+function StageFront({ p }) {
+  const done = p > 0.9;
+  return (
+    <div className="st st-front">
+      <Code text={typed(CODE_FE, p / 0.75)} />
+      <div className="live" style={{ opacity: ramp(p, 0.7, 0.85), transform: `translateY(${(1 - ramp(p, 0.7, 0.85)) * 16}px)` }}>
+        <small>Rendered output</small>
+        <div className="live-card"><h4>Interstellar</h4><span className={done ? "ok" : ""}>{done ? "Booked ✓" : "Book seats"}</span></div>
+      </div>
+    </div>
+  );
+}
+function StageApi({ p }) {
+  const req = ramp(p, 0.12, 0.5), res = ramp(p, 0.55, 0.9);
+  return (
+    <div className="st st-api">
+      <Code text={typed(CODE_API, p / 0.5)} />
+      <div className="wire">
+        <div className="node"><b>React</b><small>:5173</small></div>
+        <div className="line">
+          <i />
+          {req > 0 && req < 1 && <span className="pkt req" style={{ left: `${req * 100}%` }}>GET</span>}
+          {res > 0 && res < 1 && <span className="pkt res" style={{ left: `${(1 - res) * 100}%` }}>200</span>}
+        </div>
+        <div className="node alt"><b>Express</b><small>:5000</small></div>
+      </div>
+      <pre className="json" style={{ opacity: ramp(p, 0.8, 0.95) }}>{`[{ "title": "Interstellar", "seats": 48 }]`}</pre>
+    </div>
+  );
+}
+function StageBack({ p }) {
+  const chain = ["Request", "CORS", "verifyJWT", "Route", "Response"];
+  const at = Math.floor(ramp(p, 0.3, 0.95) * chain.length);
+  return (
+    <div className="st st-back">
+      <Code text={typed(CODE_BE, p / 0.6)} />
+      <div className="chain">{chain.map((c, i) => <span key={c} className={i < at ? "on" : ""}>{c}</span>)}</div>
+    </div>
+  );
+}
+function StageDb({ p }) {
+  const on = p > 0.45;
+  return (
+    <div className="st st-db">
+      <Code text={typed(CODE_DB, p / 0.5)} />
+      <div className="dbstat"><i className={on ? "on" : ""} /> {on ? "connected to MongoDB" : "connecting…"}</div>
+      <div className="docs">
+        {["users", "movies", "bookings"].map((c, i) => (
+          <div key={c} className="coll" style={{ opacity: ramp(p, 0.5 + i * 0.1, 0.65 + i * 0.1), transform: `translateY(${(1 - ramp(p, 0.5 + i * 0.1, 0.65 + i * 0.1)) * 18}px)` }}>
+            <b>{c}</b><span>{"{ _id, … }"}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function StageDeploy({ p }) {
+  const list = ["Test API routes and auth", "Check layouts on mobile and desktop", "Run the production build", "Deploy the UI to Vercel", "Deploy the API to Render"];
+  const done = Math.floor(ramp(p, 0.05, 0.85) * list.length + 0.001);
+  return (
+    <div className="st st-deploy">
+      <ul>{list.map((l, i) => <li key={l} className={i < done ? "ok" : ""}><i>{i < done ? "✓" : ""}</i>{l}</li>)}</ul>
+      <div className="bar"><i style={{ width: `${ramp(p, 0.05, 0.9) * 100}%` }} /></div>
+      <div className={`live-badge ${p > 0.93 ? "on" : ""}`}><i /> Live</div>
+    </div>
+  );
+}
+const STAGES = [StageDesign, StageFront, StageApi, StageBack, StageDb, StageDeploy];
+
+function Process() {
+  const ref = useRef(null);
+  const { scrollYProgress: sp } = useScroll({ target: ref, offset: ["start start", "end end"] });
+  const [st, setSt] = useState({ i: 0, p: 0 });
+  useMotionValueEvent(sp, "change", (v) => {
+    const t = clamp(v, 0, 0.9999) * STEPS.length;
+    const i = Math.floor(t), p = Math.round((t - i) * 50) / 50;
+    setSt((o) => (o.i === i && o.p === p ? o : { i, p }));
+  });
+  const Stage = STAGES[st.i];
+  const fillW = useTransform(sp, [0, 1], ["0%", "100%"]);
+  const log = LOGS[st.i];
+  return (
+    <section id="process" ref={ref} className="process" style={{ "--n": STEPS.length }}>
+      <div className="proc-sticky">
+        <div className="wrap proc-grid">
+          <div className="proc-left">
+            <Eyebrow n="05">Development process</Eyebrow>
+            <HeadLines className="sec-h sm" lines={["From idea", "to live."]} />
+            <ol className="steps">
+              {STEPS.map((s, i) => (
+                <li key={s.k} className={i === st.i ? "on" : i < st.i ? "past" : ""}>
+                  <span>{s.k}</span>
+                  <div><b>{s.t}</b><small>{s.d}</small></div>
+                </li>
+              ))}
+            </ol>
+          </div>
+          <div className="proc-right">
+            <div className="pipe" aria-hidden="true">
+              <i className="pipe-line"><motion.b style={{ width: fillW }} /></i>
+              {STEPS.map((s, i) => <span key={s.k} className={i <= st.i ? "on" : ""} style={{ left: `${(i / (STEPS.length - 1)) * 100}%` }} />)}
+            </div>
+            <div className="win glass" role="img" aria-label={`Step ${st.i + 1}: ${STEPS[st.i].t}`}>
+              <div className="win-bar"><i /><i /><i /><span>{STEPS[st.i].t}</span></div>
+              <AnimatePresence mode="wait">
+                <motion.div key={st.i} className="win-body" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.35, ease: EASE }}>
+                  <Stage p={st.p} />
+                </motion.div>
+              </AnimatePresence>
+            </div>
+            <div className="fw fw-term glass" aria-hidden="true"><small>terminal</small><p>{log[0]}</p><p className="g">{log[1]}</p></div>
+            <div className="fw fw-step glass" aria-hidden="true"><small>step</small><b>{STEPS[st.i].k}<em>/06</em></b></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ================= CONTACT ================= */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const check = (name, v) => {
   v = v.trim();
@@ -1058,65 +1201,74 @@ function ContactForm() {
   );
 
   return (
-    <form className="form" onSubmit={submit} noValidate>
+    <form className="form glass" onSubmit={submit} noValidate>
       <input name="website" value={form.website} onChange={onChange} tabIndex={-1} autoComplete="off" aria-hidden="true" style={{ position: "absolute", left: "-9999px", opacity: 0, height: 0 }} />
       {field("name", "Name", { ac: "name" })}
       {field("email", "Email", { type: "email", ac: "email" })}
       {field("message", "Message", { area: true })}
-      <Magnetic><button className="btn solid" type="submit" aria-busy={sending}>{sending ? "Sending message" : "Send message"}</button></Magnetic>
+      <Magnetic><button className="btn primary" type="submit" aria-busy={sending}>{sending ? "Sending message" : "Send message"}</button></Magnetic>
       <p className={`status ${status.type}`} role="status" aria-live="polite">{status.text}</p>
     </form>
   );
 }
 
 function Contact() {
+  const ref = useRef(null);
+  const move = (e) => {
+    const r = ref.current.getBoundingClientRect();
+    ref.current.style.setProperty("--cx", `${e.clientX - r.left}px`);
+    ref.current.style.setProperty("--cy", `${e.clientY - r.top}px`);
+  };
   return (
-    <Morph id="contact" className="sec dark">
+    <section id="contact" ref={ref} className="sec contact" onPointerMove={move}>
+      <div className="c-glow" aria-hidden="true" />
       <div className="wrap">
-        <p className="eyebrow">( 06 ) Contact</p>
-        <DotText lines={["SAY", "HELLO"]} morph={[["SAY", "HELLO"], ["HIRE", "ME"]]} every={4200} maxFs={165} />
+        <Eyebrow n="06">Contact</Eyebrow>
+        <HeadLines className="sec-h big" lines={["Let's build", "something."]} />
         <div className="contact-grid">
           <div>
-            <p className="lead">Open to React JS and MERN developer roles. Send a message or reach me here.</p>
+            <Lines className="sec-p" text="Open to React JS and MERN developer roles. Send a message or reach me here." />
             <ul className="links">
-              <li><span>Email</span><a href={`mailto:${LINKS.email}`}>{LINKS.email}</a></li>
-              <li><span>GitHub</span><a href={LINKS.github} target="_blank" rel="noreferrer">Abiyouthshalvin ↗</a></li>
-              <li><span>LinkedIn</span><a href={LINKS.linkedin} target="_blank" rel="noreferrer">abiyouth-shalvin ↗</a></li>
-              <li><span>Location</span><b>Dubai, UAE</b></li>
+              <motion.li {...reveal(0)}><span>Email</span><a href={`mailto:${LINKS.email}`}>{LINKS.email}</a></motion.li>
+              <motion.li {...reveal(1)}><span>GitHub</span><a href={LINKS.github} target="_blank" rel="noreferrer">Abiyouthshalvin ↗</a></motion.li>
+              <motion.li {...reveal(2)}><span>LinkedIn</span><a href={LINKS.linkedin} target="_blank" rel="noreferrer">abiyouth-shalvin ↗</a></motion.li>
+              <motion.li {...reveal(3)}><span>Location</span><b>Dubai, UAE</b></motion.li>
             </ul>
-            <Magnetic><a className="btn" href={RESUME} download="Abiyouth_Shalvin_Resume.pdf">Download resume ↓</a></Magnetic>
+            <div className="c-btns">
+              <Magnetic><a className="btn primary" href={`mailto:${LINKS.email}`}>Email me</a></Magnetic>
+              <Magnetic><a className="btn glass" href={RESUME} download="Abiyouth_Shalvin_Resume.pdf">Download resume ↓</a></Magnetic>
+            </div>
           </div>
-          <ContactForm />
+          <motion.div {...reveal(1)}><ContactForm /></motion.div>
         </div>
       </div>
-    </Morph>
+    </section>
   );
 }
 
 export default function App() {
-  const [loading, setLoading] = useState(true);
-  useTilt();
+  useEffect(() => { startPointer(); }, []);
   return (
     <MotionConfig reducedMotion="user">
-      <AnimatePresence>{loading && <Preloader onDone={() => setLoading(false)} />}</AnimatePresence>
+      <div className="bg" aria-hidden="true" />
+      <Particles />
+      <Spotlight />
       <Cursor />
       <ProgressBar />
-      <Glyph />
       <Nav />
+      <Model3D />
       <main>
         <Hero />
-        <Marquee items={["MongoDB", "Express.js", "React.js", "Node.js", "JavaScript", "REST APIs", "JWT", "MySQL"]} />
+        <Sideways />
         <About />
-        <Education />
-        <Experience />
-        <BigWords />
-        <Projects />
         <Skills />
+        <Experience />
+        <Projects />
+        <Process />
         <Contact />
       </main>
       <footer className="foot">
-        <div className="wordmark" aria-hidden="true">ABIYOUTH</div>
-        <div className="footer">
+        <div className="wrap foot-in">
           <span><i className="led" /> © 2026 Abiyouth Shalvin</span>
           <a href="#home">Back to top ↑</a>
         </div>
