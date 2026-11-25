@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AnimatePresence, MotionConfig, motion, motionValue, useInView,
   useMotionValueEvent, useScroll, useTransform,
@@ -256,12 +256,10 @@ function Lines({ text, as: Tag = "p", className = "", delay = 0, play, stagger =
 }
 
 /* Headings where every line is written out explicitly. */
-function HeadLines({ lines, as: Tag = "h2", className = "", delay = 0, now = false }) {
+function HeadLines({ lines, as: Tag = "h2", className = "", delay = 0, now }) {
   const ref = useRef(null);
   const seen = useInView(ref, { once: true, margin: "0px 0px -10% 0px" });
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 80); return () => clearTimeout(t); }, []);
-  const on = now ? mounted : seen;
+  const on = now === undefined ? seen : now;
   return (
     <Tag ref={ref} className={`hl ${on ? "on" : ""} ${className}`}>
       {lines.map((l, i) => (
@@ -374,7 +372,7 @@ function Particles() {
     const c = ref.current, ctx = c.getContext("2d");
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     let W = 0, H = 0, raf = 0, on = true;
-    const cols = ["79,124,255", "139,92,246", "34,211,238"];
+    const cols = ["16,185,129", "5,150,105", "110,231,183"];
     const N = reduce ? 28 : compact ? 34 : 72;
     let parts = [];
     const resize = () => {
@@ -433,13 +431,13 @@ function Model3D() {
   const W = typeof window !== "undefined" ? window.innerWidth : 1280;
   const H = typeof window !== "undefined" ? window.innerHeight : 800;
   const t = tops || [0, H, H * 2, H * 3, H * 4];
-  const marks = [0, t[1], Math.max(t[1] + 1, t[2] - H * 0.9), Math.max(t[1] + 2, t[2]), Math.max(t[1] + 3, t[3] + H * 0.15)];
+  const marks = [0, t[1] - H, t[1], Math.max(t[1] + 1, t[2] - H * 0.9), Math.max(t[1] + 2, t[2]), Math.max(t[1] + 3, t[3] + H * 0.15)];
   // keep the marks strictly increasing
   for (let i = 1; i < marks.length; i++) if (marks[i] <= marks[i - 1]) marks[i] = marks[i - 1] + 1;
-  const xs = compact ? [0.22 * W, 0.26 * W, 0.26 * W, 0.26 * W, 0.26 * W] : [0.24 * W, -0.27 * W, -0.27 * W, 0.37 * W, 0.37 * W];
-  const ys = compact ? [-0.22 * H, -0.3 * H, -0.3 * H, -0.34 * H, -0.34 * H] : [0.02 * H, 0.22 * H, 0.22 * H, -0.3 * H, -0.3 * H];
-  const ss = compact ? [0.55, 0.4, 0.4, 0.34, 0.34] : [1.1, 0.74, 0.74, 0.42, 0.42];
-  const os = compact ? [0.4, 0.2, 0.15, 0, 0] : [1, 0.95, 0.9, 0.55, 0];
+  const xs = compact ? [0.26, 0.26, 0.26, 0.26, 0.26, 0.26].map((k) => k * W) : [-0.27, -0.27, -0.27, -0.27, 0.37, 0.37].map((k) => k * W);
+  const ys = compact ? [-0.3, -0.3, -0.3, -0.3, -0.34, -0.34].map((k) => k * H) : [0.22, 0.22, 0.22, 0.22, -0.3, -0.3].map((k) => k * H);
+  const ss = compact ? [0.4, 0.4, 0.4, 0.4, 0.34, 0.34] : [0.74, 0.74, 0.74, 0.74, 0.42, 0.42];
+  const os = compact ? [0, 0, 0.2, 0.15, 0, 0] : [0, 0, 0.95, 0.9, 0.55, 0];
   const x = useTransform(scrollY, marks, xs);
   const y = useTransform(scrollY, marks, ys);
   const scale = useTransform(scrollY, marks, ss);
@@ -529,6 +527,197 @@ function Nav() {
   );
 }
 
+
+/* ================= FIRST LOADING ANIMATION =================
+   dot > letters fall out of it > name morphs into PORTFOLIO > word docks, photo assembles from dust > site */
+const INTRO_FROM = ["A", "B", "I", "Y", "O", "U", "T", "H", ""];
+const INTRO_TO = ["P", "O", "R", "T", "F", "O", "L", "I", "O"];
+const STEP_AT = [0, 500, 1100, 2100, 2600, 3600, 3900, 4200, 7000, 7700]; // ms, one entry per step
+
+function PortraitDust({ stage }) {
+  const ref = useRef(null);
+  const stageRef = useRef(stage);
+  stageRef.current = stage;
+  useEffect(() => {
+    const c = ref.current, ctx = c.getContext("2d");
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const img = new Image();
+    let W = 0, H = 0, raf = 0, alive = true, parts = [], dust = [], t0 = 0, aAt = 0, ready = false;
+    const rnd = Math.random;
+    const size = () => {
+      W = window.innerWidth; H = window.innerHeight;
+      c.width = W * dpr; c.height = H * dpr; c.style.width = W + "px"; c.style.height = H + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    const BUCKETS = 10;
+    const build = () => {
+      size();
+      parts = [];
+      const phh = Math.min(H * 0.78, W * 1.15), ar = img.width / img.height, pw = phh * ar;
+      const sw = Math.min(img.width, 420), sh = Math.round(sw / ar);
+      const off = document.createElement("canvas"); off.width = sw; off.height = sh;
+      const o = off.getContext("2d", { willReadFrequently: true });
+      o.drawImage(img, 0, 0, sw, sh);
+      const d = o.getImageData(0, 0, sw, sh).data;
+      const at = (x, y) => { const i = (y * sw + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+      const cs = [at(2, 2), at(sw - 3, 2), at(2, sh - 3), at(sw - 3, sh - 3)];
+      const bg = [0, 1, 2].map((k) => cs.reduce((s, p) => s + p[k], 0) / 4);
+      const target = W < 700 ? 3600 : 7500;
+      const step = Math.max(2, Math.round(Math.sqrt((sw * sh * 0.55) / target)));
+      const dot = Math.max(1.1, (pw / sw) * step * 0.72);
+      for (let y = 0; y < sh; y += step) for (let x = 0; x < sw; x += step) {
+        const [r, g, b, al] = at(x, y);
+        if (al < 40 || Math.hypot(r - bg[0], g - bg[1], b - bg[2]) < 46) continue;
+        const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        const k = Math.min(1, 0.18 + 0.95 * Math.pow(lum, 0.75));
+        parts.push({
+          hx: (W - pw) / 2 + (x / sw) * pw, hy: (H - phh) / 2 - H * 0.05 + (y / sh) * phh,
+          x: rnd() * W, y: rnd() * H, sx: 0, sy: 0, vx: (rnd() - 0.5) * 0.5, vy: (rnd() - 0.5) * 0.5,
+          dl: rnd() * 900, b: Math.min(BUCKETS - 1, Math.floor(k * BUCKETS)), z: dot * (0.8 + rnd() * 0.5), ph: rnd() * 6.28,
+        });
+      }
+      dust = Array.from({ length: W < 700 ? 500 : 1200 }, () => ({ x: rnd() * W, y: rnd() * H, vx: (rnd() - 0.5) * 0.6, vy: (rnd() - 0.5) * 0.6, z: 0.8 + rnd() * 1.2 }));
+      ready = true;
+    };
+    img.onload = () => alive && build();
+    img.src = PHOTO;
+    const col = (b) => { const k = 0.25 + 0.75 * (b / (BUCKETS - 1)); return `rgb(${Math.round(110 * k)},${Math.round(231 * k)},${Math.round(183 * k)})`; };
+    const cols = Array.from({ length: BUCKETS }, (_, b) => col(b));
+    const loop = (now) => {
+      raf = requestAnimationFrame(loop);
+      const st = stageRef.current;
+      ctx.clearRect(0, 0, W, H);
+      if (!ready || st === 0) return;
+      if (!t0) t0 = now;
+      const fade = Math.min(1, (now - t0) / 700);
+      // ambient dust
+      ctx.globalAlpha = 0.55 * fade;
+      ctx.fillStyle = "#a7f3d0";
+      for (const p of dust) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0) p.x = W; if (p.x > W) p.x = 0; if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+        ctx.fillRect(p.x, p.y, p.z, p.z);
+      }
+      // portrait particles
+      if (st >= 2 && !aAt) { aAt = now; for (const p of parts) { p.sx = p.x; p.sy = p.y; } }
+      for (let b = 0; b < BUCKETS; b++) {
+        ctx.fillStyle = cols[b];
+        for (const p of parts) {
+          if (p.b !== b) continue;
+          let x, y;
+          if (st < 2) {
+            p.x += p.vx; p.y += p.vy;
+            if (p.x < 0) p.x = W; if (p.x > W) p.x = 0; if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+            x = p.x; y = p.y; ctx.globalAlpha = 0.5 * fade;
+          } else {
+            const t = Math.min(1, Math.max(0, (now - aAt - p.dl) / 1150)), e = 1 - Math.pow(1 - t, 3);
+            x = p.sx + (p.hx - p.sx) * e + Math.sin(now * 0.002 + p.ph) * (0.5 + (1 - e) * 6);
+            y = p.sy + (p.hy - p.sy) * e + Math.cos(now * 0.0017 + p.ph) * (0.5 + (1 - e) * 6);
+            ctx.globalAlpha = 0.5 + 0.5 * e;
+          }
+          ctx.fillRect(x, y, p.z, p.z);
+        }
+      }
+      ctx.globalAlpha = 1;
+    };
+    raf = requestAnimationFrame(loop);
+    const onResize = () => { if (img.complete && img.naturalWidth) { build(); aAt = aAt ? performance.now() - 5000 : 0; } };
+    window.addEventListener("resize", onResize);
+    return () => { alive = false; cancelAnimationFrame(raf); window.removeEventListener("resize", onResize); };
+  }, []);
+  return <canvas ref={ref} className="intro-canvas" aria-hidden="true" />;
+}
+
+function Intro({ onDone }) {
+  const [s, setS] = useState(0);
+  const [chars, setChars] = useState(INTRO_FROM);
+  const [geo, setGeo] = useState(null);
+  const [dock, setDock] = useState({ dx: 0, dy: 0 });
+  const word = useRef(null);
+  const group = useRef(null);
+
+  // step timeline
+  useEffect(() => {
+    const timers = STEP_AT.slice(1).map((t, i) => setTimeout(() => setS(i + 1), t));
+    return () => timers.forEach(clearTimeout);
+  }, []);
+  useEffect(() => { if (s >= 9) onDone(); }, [s, onDone]);
+
+  // measure where each letter sits so it can start from the dot
+  useEffect(() => {
+    const measure = () => {
+      const w = word.current;
+      if (!w) return;
+      const wr = w.getBoundingClientRect(), mid = wr.left + wr.width / 2;
+      setGeo([...w.querySelectorAll(".ch")].map((el) => { const r = el.getBoundingClientRect(); return Math.round(mid - (r.left + r.width / 2)); }));
+    };
+    measure();
+    document.fonts?.ready.then(measure);
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  // morph the name into PORTFOLIO, one letter at a time
+  useEffect(() => {
+    if (s !== 4) return;
+    const timers = INTRO_TO.map((ch, i) => setTimeout(() => setChars((c) => c.map((x, j) => (j === i ? ch : x))), i * 105));
+    return () => timers.forEach(clearTimeout);
+  }, [s]);
+
+  // dock the word bottom-left
+  useEffect(() => {
+    if (s !== 5 || !group.current) return;
+    const r = group.current.getBoundingClientRect();
+    const pad = Math.max(20, window.innerWidth * 0.05);
+    setDock({ dx: Math.round(pad - r.left), dy: Math.round(window.innerHeight * 0.3) });
+  }, [s]);
+
+  useEffect(() => {
+    const k = (e) => e.key === "Escape" && onDone();
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [onDone]);
+
+  const rot = (i, k) => `${((i * 67 + k * 41) % 150) - 75}deg`;
+  return (
+    <div className={`intro ${s >= 8 ? "out" : ""}`} role="status" aria-label="Loading portfolio">
+      <div className="intro-glow" />
+      <PortraitDust stage={s >= 7 ? 2 : s >= 6 ? 1 : 0} />
+
+      <div className={`intro-bar ${s >= 5 ? "on" : ""}`} aria-hidden="true">
+        <b>ABIYOUTH SHALVIN</b>
+        <span>{["HOME", "ABOUT", "SKILLS", "EXPERIENCE", "PROJECTS", "CONTACT"].map((l) => <i key={l}>{l}</i>)}</span>
+      </div>
+
+      <div className="intro-main">
+        <div ref={group} className={`intro-group ${s >= 5 ? "docked" : ""}`} style={{ "--dx": `${dock.dx}px`, "--dy": `${dock.dy}px` }}>
+          <div className="intro-word" ref={word}>
+            {chars.map((ch, i) => (
+              <span key={`${i}-${ch}`}
+                className={`ch ${s >= 3 ? "on" : ""} ${s >= 2 && s < 3 && geo ? "fall" : ""} ${s >= 4 && ch !== INTRO_FROM[i] ? "flip" : ""} ${ch === "" ? "empty" : ""}`}
+                style={{ "--sx": `${geo ? geo[i] || 0 : 0}px`, "--i": i, "--r0": rot(i, 1), "--r1": rot(i, 2) }}>
+                {ch}
+              </span>
+            ))}
+            <i className={`i-dot ${s >= 3 ? "gone" : ""}`} />
+            <i className={`i-stem ${s >= 1 ? "show" : ""} ${s >= 2 ? "tumble" : ""}`} />
+          </div>
+          <p className={`intro-sub ${s >= 5 ? "on" : ""}`}>MERN Stack <em>Developer</em></p>
+        </div>
+      </div>
+
+      <button className="intro-skip" onClick={onDone}>Skip intro <span aria-hidden="true">→</span></button>
+    </div>
+  );
+}
+const introWanted = () => {
+  try {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+    if (/[?&]intro\b/.test(window.location.search)) return true;
+    return !sessionStorage.getItem("intro-seen");
+  } catch { return true; }
+};
+
 /* ================= HERO: layered parallax ================= */
 function Floater({ scroll, d, cls = "", style, children }) {
   const reduce = useReduced();
@@ -546,69 +735,132 @@ const Cube = () => (
   <div className="cube">{["f", "b", "r", "l", "t", "bt"].map((f) => <i key={f} className={f} />)}</div>
 );
 
-function Hero() {
+const HERO_VIDEO = "/hero-scrub.mp4";
+const HERO_POSTER = "/hero-poster.jpg";
+const HERO_CAPS = [
+  ["01 · Frontend", "React.js, hooks and reusable components"],
+  ["02 · Backend", "Node.js, Express.js and JWT-secured REST APIs"],
+  ["03 · Database", "MongoDB and MySQL, from schema to query"],
+];
+
+/* The video is played by scroll: scroll position (0..1) becomes the video's current time. */
+function ScrollVideo({ progress }) {
+  const ref = useRef(null);
+  const reduce = useReduced();
+  const st = useRef({ target: 0, cur: 0, dur: 0 });
+  useMotionValueEvent(progress, "change", (v) => { st.current.target = clamp(v) * st.current.dur; });
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    const onMeta = () => {
+      st.current.dur = Math.max(0, v.duration - 0.05);
+      st.current.target = st.current.cur = clamp(progress.get()) * st.current.dur;
+      if (!reduce) v.currentTime = st.current.cur;
+    };
+    if (v.readyState >= 1) onMeta();
+    v.addEventListener("loadedmetadata", onMeta);
+    if (reduce) return () => v.removeEventListener("loadedmetadata", onMeta);
+    v.play().then(() => v.pause()).catch(() => {}); // unlocks seeking on iPhone Safari
+    let raf = 0;
+    const loop = () => {
+      const s = st.current;
+      s.cur += (s.target - s.cur) * 0.14; // ease toward the scroll position: smooth, no jitter
+      if (s.dur && Math.abs(v.currentTime - s.cur) > 0.02) v.currentTime = s.cur;
+      raf = requestAnimationFrame(loop);
+    };
+    loop();
+    return () => { cancelAnimationFrame(raf); v.removeEventListener("loadedmetadata", onMeta); };
+  }, [reduce, progress]);
+  return <video ref={ref} className="hero-video" src={HERO_VIDEO} poster={HERO_POSTER} muted playsInline preload="auto" tabIndex={-1} aria-hidden="true" />;
+}
+
+function HeroCap({ p, i, title, text }) {
+  const a = 0.3 + i * 0.22;
+  const o = useTransform(p, [a - 0.06, a, a + 0.14, a + 0.2], [0, 1, 1, 0]);
+  const y = useTransform(p, [a - 0.06, a, a + 0.14, a + 0.2], [30, 0, 0, -30]);
+  return (
+    <motion.div className="hero-cap" style={{ opacity: o, y }}>
+      <small>{title}</small>
+      <b>{text}</b>
+    </motion.div>
+  );
+}
+
+function Hero({ ready = true }) {
   const ref = useRef(null);
   const compact = useCompact();
   const reduce = useReduced();
-  const { scrollYProgress: sp } = useScroll({ target: ref, offset: ["start start", "end start"] });
+  const { scrollYProgress: sp } = useScroll({ target: ref, offset: ["start start", "end end"] });
   const gridY = useTransform(sp, [0, 1], reduce ? [0, 0] : [0, 90]);
   const blobY = useTransform(sp, [0, 1], reduce ? [0, 0] : [0, 180]);
   const blobX = useTransform(mx, [-1, 1], reduce ? [0, 0] : [50, -50]);
   const typeY = useTransform(sp, [0, 1], reduce ? [0, 0] : [0, -140]);
   const typeX = useTransform(mx, [-1, 1], reduce ? [0, 0] : [-30, 30]);
-  const contentY = useTransform(sp, [0, 1], reduce ? [0, 0] : [0, -70]);
-  const contentO = useTransform(sp, [0, 0.7], reduce ? [1, 1] : [1, 0]);
-  const [ready, setReady] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setReady(true), 80); return () => clearTimeout(t); }, []);
+  const contentY = useTransform(sp, [0, 0.22], reduce ? [0, 0] : [0, -90]);
+  const contentO = useTransform(sp, [0, 0.2], reduce ? [1, 1] : [1, 0]);
+  const fxO = useTransform(sp, [0, 0.25], reduce ? [1, 1] : [1, 0]);
+  const shadeO = useTransform(sp, [0, 0.3], reduce ? [1, 1] : [1, 0.18]);
+  const cueO = useTransform(sp, [0, 0.1], reduce ? [1, 1] : [1, 0]);
+  const [go, setGo] = useState(false);
+  useEffect(() => { if (!ready) return; const t = setTimeout(() => setGo(true), 80); return () => clearTimeout(t); }, [ready]);
   return (
     <section id="home" ref={ref} className="hero">
-      {/* layer 1: far grid */}
-      <motion.div className="layer l-grid" style={{ y: gridY }} />
-      {/* layer 2: colour blobs */}
-      <motion.div className="layer l-blobs" style={{ y: blobY, x: blobX }}><i className="b1" /><i className="b2" /><i className="b3" /></motion.div>
-      {/* layer 3: giant outlined type */}
-      <motion.div className="layer l-type" style={{ y: typeY, x: typeX }} aria-hidden="true">
-        <span>MERN</span>
-      </motion.div>
-      {/* layer 4: floating objects at different depths */}
-      <div className="layer l-float" aria-hidden="true">
-        <Floater scroll={sp} d={0.5} cls="f1" style={{ left: "8%", top: "22%" }}><div className="chip">{"</>"}</div></Floater>
-        <Floater scroll={sp} d={1.4} cls="f2" style={{ left: "46%", top: "14%" }}><Cube /></Floater>
-        <Floater scroll={sp} d={0.8} cls="f3" style={{ left: "58%", top: "70%" }}><div className="ring" /></Floater>
-        <Floater scroll={sp} d={1.1} cls="f4" style={{ left: "5%", top: "68%" }}><div className="chip alt">JWT</div></Floater>
-        <Floater scroll={sp} d={0.35} cls="f5" style={{ left: "36%", top: "82%" }}><div className="dotp" /></Floater>
-        {!compact && <>
-          <Floater scroll={sp} d={1.7} cls="f6" style={{ left: "88%", top: "12%" }}><div className="chip">{"{ }"}</div></Floater>
-          <Floater scroll={sp} d={0.9} cls="f7" style={{ left: "78%", top: "78%" }}><Cube /></Floater>
-          <Floater scroll={sp} d={0.6} cls="f8" style={{ left: "26%", top: "10%" }}><div className="chip alt">API</div></Floater>
-          <Floater scroll={sp} d={1.25} cls="f9" style={{ left: "92%", top: "52%" }}><div className="ring sm" /></Floater>
-          <Floater scroll={sp} d={0.45} cls="f10" style={{ left: "16%", top: "46%" }}><div className="dotp b" /></Floater>
-        </>}
-      </div>
+      <div className="hero-pin">
+        {/* video: scrubbed by scroll */}
+        <ScrollVideo progress={sp} />
+        <motion.div className="hero-shade" style={{ opacity: shadeO }} />
+        <div className="hero-vig" />
 
-      <motion.div className="hero-in wrap" style={{ y: contentY, opacity: contentO }}>
-        <motion.p className="pill" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.8, ease: EASE }}>
-          <i className="led" /> Open to React JS &amp; MERN roles · Dubai, UAE
-        </motion.p>
-        <h1 className="hero-h" aria-label="Hi, I'm Abiyouth Shalvin">
-          <HeadLines as="span" now lines={["Hi, I'm"]} delay={0.5} className="h-sm" />
-          <HeadLines as="span" now lines={["Abiyouth", "Shalvin"]} delay={0.65} className="h-big grad" />
-        </h1>
-        <motion.p className="hero-sub" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.1, duration: 0.8, ease: EASE }}>
-          Software Developer <span>|</span> MERN Stack Developer
-        </motion.p>
-        <Lines className="hero-p" delay={1.2} play={ready}
-          text="I build complete, working web products with MongoDB, Express.js, React.js and Node.js. Responsive interfaces, clean REST APIs and secure JWT authentication, shipped from the first sketch to a live deploy." />
-        <motion.div className="cta" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.7, duration: 0.8, ease: EASE }}>
-          <Magnetic><a className="btn primary" href="#projects">View My Projects <span aria-hidden="true">→</span></a></Magnetic>
-          <Magnetic><a className="btn glass" href={RESUME} download="Abiyouth_Shalvin_Resume.pdf">Download Resume <span aria-hidden="true">↓</span></a></Magnetic>
-          <Magnetic><a className="btn ghost" href="#contact">Contact Me</a></Magnetic>
+        <motion.div className="hero-fx" style={{ opacity: fxO }} aria-hidden="true">
+          {/* layer 1: far grid */}
+          <motion.div className="layer l-grid" style={{ y: gridY }} />
+          {/* layer 2: colour blobs */}
+          <motion.div className="layer l-blobs" style={{ y: blobY, x: blobX }}><i className="b1" /><i className="b2" /><i className="b3" /></motion.div>
+          {/* layer 3: giant outlined type */}
+          <motion.div className="layer l-type" style={{ y: typeY, x: typeX }}><span>MERN</span></motion.div>
+          {/* layer 4: floating objects at different depths */}
+          <div className="layer l-float">
+            <Floater scroll={sp} d={0.5} cls="f1" style={{ left: "8%", top: "22%" }}><div className="chip">{"</>"}</div></Floater>
+            <Floater scroll={sp} d={1.4} cls="f2" style={{ left: "46%", top: "14%" }}><Cube /></Floater>
+            <Floater scroll={sp} d={0.8} cls="f3" style={{ left: "58%", top: "70%" }}><div className="ring" /></Floater>
+            <Floater scroll={sp} d={1.1} cls="f4" style={{ left: "5%", top: "68%" }}><div className="chip alt">JWT</div></Floater>
+            <Floater scroll={sp} d={0.35} cls="f5" style={{ left: "36%", top: "82%" }}><div className="dotp" /></Floater>
+            {!compact && <>
+              <Floater scroll={sp} d={1.7} cls="f6" style={{ left: "88%", top: "12%" }}><div className="chip">{"{ }"}</div></Floater>
+              <Floater scroll={sp} d={0.9} cls="f7" style={{ left: "78%", top: "78%" }}><Cube /></Floater>
+              <Floater scroll={sp} d={0.6} cls="f8" style={{ left: "26%", top: "10%" }}><div className="chip alt">API</div></Floater>
+              <Floater scroll={sp} d={1.25} cls="f9" style={{ left: "92%", top: "52%" }}><div className="ring sm" /></Floater>
+              <Floater scroll={sp} d={0.45} cls="f10" style={{ left: "16%", top: "46%" }}><div className="dotp b" /></Floater>
+            </>}
+          </div>
         </motion.div>
-      </motion.div>
 
-      <a className="scroll-cue" href="#about" aria-label="Scroll down to About">
-        <span className="mouse"><i /></span><small>Scroll</small>
-      </a>
+        <motion.div className="hero-in wrap" style={{ y: contentY, opacity: contentO }}>
+          <motion.p className="pill" initial={{ opacity: 0, y: 16 }} animate={go ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }} transition={{ delay: 0.4, duration: 0.8, ease: EASE }}>
+            <i className="led" /> Open to React JS &amp; MERN roles · Dubai, UAE
+          </motion.p>
+          <h1 className="hero-h" aria-label="Hi, I'm Abiyouth Shalvin">
+            <HeadLines as="span" now={go} lines={["Hi, I'm"]} delay={0.5} className="h-sm" />
+            <HeadLines as="span" now={go} lines={["Abiyouth", "Shalvin"]} delay={0.65} className="h-big grad" />
+          </h1>
+          <motion.p className="hero-sub" initial={{ opacity: 0, y: 20 }} animate={go ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }} transition={{ delay: 1.1, duration: 0.8, ease: EASE }}>
+            Software Developer <span>|</span> MERN Stack Developer
+          </motion.p>
+          <Lines className="hero-p" delay={1.2} play={go}
+            text="I build complete, working web products with MongoDB, Express.js, React.js and Node.js. Responsive interfaces, clean REST APIs and secure JWT authentication, shipped from the first sketch to a live deploy." />
+          <motion.div className="cta" initial={{ opacity: 0, y: 24 }} animate={go ? { opacity: 1, y: 0 } : { opacity: 0, y: 24 }} transition={{ delay: 1.7, duration: 0.8, ease: EASE }}>
+            <Magnetic><a className="btn primary" href="#projects">View My Projects <span aria-hidden="true">→</span></a></Magnetic>
+            <Magnetic><a className="btn glass" href={RESUME} download="Abiyouth_Shalvin_Resume.pdf">Download Resume <span aria-hidden="true">↓</span></a></Magnetic>
+            <Magnetic><a className="btn ghost" href="#contact">Contact Me</a></Magnetic>
+          </motion.div>
+        </motion.div>
+
+        {!reduce && HERO_CAPS.map(([t, x], i) => <HeroCap key={t} p={sp} i={i} title={t} text={x} />)}
+
+        <motion.a className="scroll-cue" href="#about" aria-label="Scroll down to About" style={{ opacity: cueO }}>
+          <span className="mouse"><i /></span><small>Scroll</small>
+        </motion.a>
+      </div>
     </section>
   );
 }
@@ -1020,7 +1272,7 @@ function StageDesign({ p }) {
         <div className="wf-cards">{[0, 1, 2].map((i) => <div key={i} style={{ opacity: ramp(p, 0.22 + i * 0.07, 0.38 + i * 0.07) }} />)}</div>
       </div>
       <div className="tokens" style={{ opacity: ramp(p, 0.5, 0.75) }}>
-        <span style={{ background: "#4f7cff" }} /><span style={{ background: "#8b5cf6" }} /><span style={{ background: "#22d3ee" }} />
+        <span style={{ background: "#10b981" }} /><span style={{ background: "#059669" }} /><span style={{ background: "#6ee7b7" }} />
         <b>Aa</b><small>Type · spacing · colour</small>
       </div>
     </div>
@@ -1247,9 +1499,19 @@ function Contact() {
 }
 
 export default function App() {
+  const [intro, setIntro] = useState(introWanted);
+  const finishIntro = useCallback(() => {
+    try { sessionStorage.setItem("intro-seen", "1"); } catch { /* ignore */ }
+    setIntro(false);
+  }, []);
   useEffect(() => { startPointer(); }, []);
+  useEffect(() => {
+    document.body.style.overflow = intro ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [intro]);
   return (
     <MotionConfig reducedMotion="user">
+      {intro && <Intro onDone={finishIntro} />}
       <div className="bg" aria-hidden="true" />
       <Particles />
       <Spotlight />
@@ -1258,7 +1520,7 @@ export default function App() {
       <Nav />
       <Model3D />
       <main>
-        <Hero />
+        <Hero ready={!intro} />
         <Sideways />
         <About />
         <Skills />
