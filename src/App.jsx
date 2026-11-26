@@ -529,119 +529,23 @@ function Nav() {
 
 
 /* ================= FIRST LOADING ANIMATION =================
-   dot > letters fall out of it > name morphs into PORTFOLIO > word docks, photo assembles from dust > site */
+   dot > letters fall out of it > name morphs into PORTFOLIO > subtitle > site */
 const INTRO_FROM = ["A", "B", "I", "Y", "O", "U", "T", "H", ""];
 const INTRO_TO = ["P", "O", "R", "T", "F", "O", "L", "I", "O"];
-const STEP_AT = [0, 500, 1100, 2100, 2600, 3600, 3900, 4200, 7000, 7700]; // ms, one entry per step
-
-function PortraitDust({ stage }) {
-  const ref = useRef(null);
-  const stageRef = useRef(stage);
-  stageRef.current = stage;
-  useEffect(() => {
-    const c = ref.current, ctx = c.getContext("2d");
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const img = new Image();
-    let W = 0, H = 0, raf = 0, alive = true, parts = [], dust = [], t0 = 0, aAt = 0, ready = false;
-    const rnd = Math.random;
-    const size = () => {
-      W = window.innerWidth; H = window.innerHeight;
-      c.width = W * dpr; c.height = H * dpr; c.style.width = W + "px"; c.style.height = H + "px";
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    const BUCKETS = 10;
-    const build = () => {
-      size();
-      parts = [];
-      const phh = Math.min(H * 0.78, W * 1.15), ar = img.width / img.height, pw = phh * ar;
-      const sw = Math.min(img.width, 420), sh = Math.round(sw / ar);
-      const off = document.createElement("canvas"); off.width = sw; off.height = sh;
-      const o = off.getContext("2d", { willReadFrequently: true });
-      o.drawImage(img, 0, 0, sw, sh);
-      const d = o.getImageData(0, 0, sw, sh).data;
-      const at = (x, y) => { const i = (y * sw + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
-      const cs = [at(2, 2), at(sw - 3, 2), at(2, sh - 3), at(sw - 3, sh - 3)];
-      const bg = [0, 1, 2].map((k) => cs.reduce((s, p) => s + p[k], 0) / 4);
-      const target = W < 700 ? 3600 : 7500;
-      const step = Math.max(2, Math.round(Math.sqrt((sw * sh * 0.55) / target)));
-      const dot = Math.max(1.1, (pw / sw) * step * 0.72);
-      for (let y = 0; y < sh; y += step) for (let x = 0; x < sw; x += step) {
-        const [r, g, b, al] = at(x, y);
-        if (al < 40 || Math.hypot(r - bg[0], g - bg[1], b - bg[2]) < 46) continue;
-        const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        const k = Math.min(1, 0.18 + 0.95 * Math.pow(lum, 0.75));
-        parts.push({
-          hx: (W - pw) / 2 + (x / sw) * pw, hy: (H - phh) / 2 - H * 0.05 + (y / sh) * phh,
-          x: rnd() * W, y: rnd() * H, sx: 0, sy: 0, vx: (rnd() - 0.5) * 0.5, vy: (rnd() - 0.5) * 0.5,
-          dl: rnd() * 900, b: Math.min(BUCKETS - 1, Math.floor(k * BUCKETS)), z: dot * (0.8 + rnd() * 0.5), ph: rnd() * 6.28,
-        });
-      }
-      dust = Array.from({ length: W < 700 ? 500 : 1200 }, () => ({ x: rnd() * W, y: rnd() * H, vx: (rnd() - 0.5) * 0.6, vy: (rnd() - 0.5) * 0.6, z: 0.8 + rnd() * 1.2 }));
-      ready = true;
-    };
-    img.onload = () => alive && build();
-    img.src = PHOTO;
-    const col = (b) => { const k = 0.25 + 0.75 * (b / (BUCKETS - 1)); return `rgb(${Math.round(110 * k)},${Math.round(231 * k)},${Math.round(183 * k)})`; };
-    const cols = Array.from({ length: BUCKETS }, (_, b) => col(b));
-    const loop = (now) => {
-      raf = requestAnimationFrame(loop);
-      const st = stageRef.current;
-      ctx.clearRect(0, 0, W, H);
-      if (!ready || st === 0) return;
-      if (!t0) t0 = now;
-      const fade = Math.min(1, (now - t0) / 700);
-      // ambient dust
-      ctx.globalAlpha = 0.55 * fade;
-      ctx.fillStyle = "#a7f3d0";
-      for (const p of dust) {
-        p.x += p.vx; p.y += p.vy;
-        if (p.x < 0) p.x = W; if (p.x > W) p.x = 0; if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
-        ctx.fillRect(p.x, p.y, p.z, p.z);
-      }
-      // portrait particles
-      if (st >= 2 && !aAt) { aAt = now; for (const p of parts) { p.sx = p.x; p.sy = p.y; } }
-      for (let b = 0; b < BUCKETS; b++) {
-        ctx.fillStyle = cols[b];
-        for (const p of parts) {
-          if (p.b !== b) continue;
-          let x, y;
-          if (st < 2) {
-            p.x += p.vx; p.y += p.vy;
-            if (p.x < 0) p.x = W; if (p.x > W) p.x = 0; if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
-            x = p.x; y = p.y; ctx.globalAlpha = 0.5 * fade;
-          } else {
-            const t = Math.min(1, Math.max(0, (now - aAt - p.dl) / 1150)), e = 1 - Math.pow(1 - t, 3);
-            x = p.sx + (p.hx - p.sx) * e + Math.sin(now * 0.002 + p.ph) * (0.5 + (1 - e) * 6);
-            y = p.sy + (p.hy - p.sy) * e + Math.cos(now * 0.0017 + p.ph) * (0.5 + (1 - e) * 6);
-            ctx.globalAlpha = 0.5 + 0.5 * e;
-          }
-          ctx.fillRect(x, y, p.z, p.z);
-        }
-      }
-      ctx.globalAlpha = 1;
-    };
-    raf = requestAnimationFrame(loop);
-    const onResize = () => { if (img.complete && img.naturalWidth) { build(); aAt = aAt ? performance.now() - 5000 : 0; } };
-    window.addEventListener("resize", onResize);
-    return () => { alive = false; cancelAnimationFrame(raf); window.removeEventListener("resize", onResize); };
-  }, []);
-  return <canvas ref={ref} className="intro-canvas" aria-hidden="true" />;
-}
+const STEP_AT = [0, 500, 1100, 2100, 2600, 3700, 5200, 5900]; // ms, one entry per step
 
 function Intro({ onDone }) {
   const [s, setS] = useState(0);
   const [chars, setChars] = useState(INTRO_FROM);
   const [geo, setGeo] = useState(null);
-  const [dock, setDock] = useState({ dx: 0, dy: 0 });
   const word = useRef(null);
-  const group = useRef(null);
 
   // step timeline
   useEffect(() => {
     const timers = STEP_AT.slice(1).map((t, i) => setTimeout(() => setS(i + 1), t));
     return () => timers.forEach(clearTimeout);
   }, []);
-  useEffect(() => { if (s >= 9) onDone(); }, [s, onDone]);
+  useEffect(() => { if (s >= 7) onDone(); }, [s, onDone]);
 
   // measure where each letter sits so it can start from the dot
   useEffect(() => {
@@ -664,14 +568,6 @@ function Intro({ onDone }) {
     return () => timers.forEach(clearTimeout);
   }, [s]);
 
-  // dock the word bottom-left
-  useEffect(() => {
-    if (s !== 5 || !group.current) return;
-    const r = group.current.getBoundingClientRect();
-    const pad = Math.max(20, window.innerWidth * 0.05);
-    setDock({ dx: Math.round(pad - r.left), dy: Math.round(window.innerHeight * 0.3) });
-  }, [s]);
-
   useEffect(() => {
     const k = (e) => e.key === "Escape" && onDone();
     window.addEventListener("keydown", k);
@@ -680,17 +576,11 @@ function Intro({ onDone }) {
 
   const rot = (i, k) => `${((i * 67 + k * 41) % 150) - 75}deg`;
   return (
-    <div className={`intro ${s >= 8 ? "out" : ""}`} role="status" aria-label="Loading portfolio">
+    <div className={`intro ${s >= 6 ? "out" : ""}`} role="status" aria-label="Loading portfolio">
       <div className="intro-glow" />
-      <PortraitDust stage={s >= 7 ? 2 : s >= 6 ? 1 : 0} />
-
-      <div className={`intro-bar ${s >= 5 ? "on" : ""}`} aria-hidden="true">
-        <b>ABIYOUTH SHALVIN</b>
-        <span>{["HOME", "ABOUT", "SKILLS", "EXPERIENCE", "PROJECTS", "CONTACT"].map((l) => <i key={l}>{l}</i>)}</span>
-      </div>
 
       <div className="intro-main">
-        <div ref={group} className={`intro-group ${s >= 5 ? "docked" : ""}`} style={{ "--dx": `${dock.dx}px`, "--dy": `${dock.dy}px` }}>
+        <div className="intro-group">
           <div className="intro-word" ref={word}>
             {chars.map((ch, i) => (
               <span key={`${i}-${ch}`}

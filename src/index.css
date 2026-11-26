@@ -477,8 +477,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 @keyframes glowIn { from { opacity: 0; transform: scale(0.6); } }
 .intro-canvas { position: absolute; inset: 0; pointer-events: none; }
 .intro-main { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
-.intro-group { position: relative; display: inline-flex; flex-direction: column; align-items: flex-start; transition: transform 1s var(--ease); }
-.intro-group.docked { transform: translate(var(--dx), var(--dy)); }
+.intro-group { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
 .intro-word { position: relative; display: flex; align-items: baseline; font-size: clamp(2.6rem, 12.4vw, 9.4rem); font-weight: 800; letter-spacing: -0.045em; line-height: 1; filter: drop-shadow(0 0 26px rgba(16, 185, 129, 0.35)); }
 .ch { display: inline-block; opacity: 0; background: linear-gradient(180deg, #ffffff 25%, #7e978b 105%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; padding: 0 0.01em; }
 .ch.on { opacity: 1; }
@@ -500,9 +499,9 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .i-stem.tumble { animation: stemTumble 0.7s cubic-bezier(0.5, 0, 0.75, 0) both; }
 @keyframes stemIn { from { transform: scaleY(0); } }
 @keyframes stemTumble { 0% { transform: rotate(0); opacity: 1; } 100% { transform: rotate(-80deg) translateY(0.3em) scale(0.5); opacity: 0; } }
-.intro-sub { position: absolute; top: 100%; left: 0; margin-top: 0.35em; font-size: clamp(0.95rem, 2.4vw, 1.3rem); font-weight: 600; color: #ecfdf5; letter-spacing: 0; opacity: 0; transform: translateY(10px); transition: opacity 0.7s 0.5s, transform 0.7s 0.5s var(--ease); white-space: nowrap; }
+.intro-sub { position: absolute; top: 100%; left: 50%; margin-top: 0.45em; font-size: clamp(0.95rem, 2.4vw, 1.3rem); font-weight: 600; color: #ecfdf5; letter-spacing: 0; opacity: 0; transform: translate(-50%, 10px); transition: opacity 0.7s, transform 0.7s var(--ease); white-space: nowrap; }
 .intro-sub em { font-weight: 400; color: #8fa89c; }
-.intro-sub.on { opacity: 1; transform: none; }
+.intro-sub.on { opacity: 1; transform: translate(-50%, 0); }
 .intro-bar { position: absolute; top: 22px; left: var(--pad); right: var(--pad); display: flex; justify-content: space-between; align-items: center; font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.14em; opacity: 0; transform: translateY(-10px); transition: opacity 0.8s 0.3s, transform 0.8s 0.3s var(--ease); }
 .intro-bar.on { opacity: 1; transform: none; }
 .intro-bar b { font-weight: 700; color: #ecfdf5; }
